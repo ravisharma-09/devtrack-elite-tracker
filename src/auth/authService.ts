@@ -1,14 +1,23 @@
 import { getSupabaseClient } from '../backend/supabaseClient';
 
-// ─── Sign Up (creates Supabase Auth user + profile via trigger) ───────────────
+// ─── Sign Up ──────────────────────────────────────────────────────────────────
 export async function signUp(email: string, password: string, name: string) {
     const supabase = await getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');
-
     const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
+        email, password,
         options: { data: { name } },
+    });
+    if (error) throw error;
+    return data;
+}
+
+// ─── Verify Email OTP (after signup) ─────────────────────────────────────────
+export async function verifyEmailOtp(email: string, token: string) {
+    const supabase = await getSupabaseClient();
+    if (!supabase) throw new Error('Supabase not configured');
+    const { data, error } = await supabase.auth.verifyOtp({
+        email, token, type: 'signup',
     });
     if (error) throw error;
     return data;
@@ -18,7 +27,6 @@ export async function signUp(email: string, password: string, name: string) {
 export async function signIn(email: string, password: string) {
     const supabase = await getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');
-
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data;
@@ -29,6 +37,23 @@ export async function signOut() {
     const supabase = await getSupabaseClient();
     if (!supabase) return;
     await supabase.auth.signOut();
+}
+
+// ─── Request Password Reset Email ─────────────────────────────────────────────
+export async function resetPasswordForEmail(email: string) {
+    const supabase = await getSupabaseClient();
+    if (!supabase) throw new Error('Supabase not configured');
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+}
+
+// ─── Update Password (called on /reset-password after email link) ─────────────
+export async function updatePassword(newPassword: string) {
+    const supabase = await getSupabaseClient();
+    if (!supabase) throw new Error('Supabase not configured');
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
 }
 
 // ─── Get Current Session ──────────────────────────────────────────────────────

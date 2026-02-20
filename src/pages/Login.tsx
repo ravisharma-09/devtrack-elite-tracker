@@ -73,9 +73,14 @@ export const Login: React.FC = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-mono text-brand-secondary mb-1.5 uppercase tracking-widest">
-                                Password
-                            </label>
+                            <div className="flex justify-between items-center mb-1.5">
+                                <label className="block text-xs font-mono text-brand-secondary uppercase tracking-widest">
+                                    Password
+                                </label>
+                                <Link to="/forgot-password" className="text-xs font-mono text-brand-secondary hover:text-brand-accent transition-colors">
+                                    Forgot password?
+                                </Link>
+                            </div>
                             <input
                                 type="password" required autoComplete="current-password"
                                 value={password} onChange={e => setPassword(e.target.value)}
