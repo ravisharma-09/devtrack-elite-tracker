@@ -126,5 +126,6 @@ export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onCl
 
                 </div>
             </div>
-            );
+        </div>
+    );
 };
