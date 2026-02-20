@@ -215,3 +215,76 @@ create table if not exists public.ai_analytics_cache (
 alter table public.ai_analytics_cache enable row level security;
 drop policy if exists "Users can CRUD own AI cache" on public.ai_analytics_cache;
 create policy "Users can CRUD own AI cache" on public.ai_analytics_cache for all using (auth.uid() = user_id);
+
+-- ════════════════════════════════════════════════════
+-- 14. LEADERBOARD STATS TABLE
+-- ════════════════════════════════════════════════════
+create table if not exists public.leaderboard_stats (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade unique,
+  username text not null,
+  skill_score integer default 0,
+  problems_solved integer default 0,
+  study_hours integer default 0,
+  consistency_score integer default 0,
+  codeforces_rating integer default 0,
+  leetcode_solved integer default 0,
+  github_activity_score integer default 0,
+  batch text,
+  last_updated timestamptz default now()
+);
+alter table public.leaderboard_stats enable row level security;
+drop policy if exists "Anyone can view leaderboard" on public.leaderboard_stats;
+create policy "Anyone can view leaderboard" on public.leaderboard_stats for select using (true);
+drop policy if exists "Users can update own leaderboard row" on public.leaderboard_stats;
+create policy "Users can update own leaderboard row" on public.leaderboard_stats for update using (auth.uid() = user_id);
+drop policy if exists "Users can insert own leaderboard row" on public.leaderboard_stats;
+create policy "Users can insert own leaderboard row" on public.leaderboard_stats for insert with check (auth.uid() = user_id);
+
+-- ════════════════════════════════════════════════════
+-- 15. LEADERBOARD CACHE TABLE
+-- ════════════════════════════════════════════════════
+create table if not exists public.leaderboard_cache (
+  id uuid primary key default gen_random_uuid(),
+  payload jsonb not null,
+  updated_at timestamptz default now()
+);
+alter table public.leaderboard_cache enable row level security;
+drop policy if exists "Anyone can view leaderboard cache" on public.leaderboard_cache;
+create policy "Anyone can view leaderboard cache" on public.leaderboard_cache for select using (true);
+drop policy if exists "Anyone can update leaderboard cache" on public.leaderboard_cache;
+create policy "Anyone can update leaderboard cache" on public.leaderboard_cache for all using (true);
+
+-- ════════════════════════════════════════════════════
+-- 16. RANK HISTORY TABLE
+-- ════════════════════════════════════════════════════
+create table if not exists public.rank_history (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  date text not null,
+  rank integer not null,
+  created_at timestamptz default now(),
+  primary key (user_id, date)
+);
+alter table public.rank_history enable row level security;
+drop policy if exists "Users can CRUD own rank history" on public.rank_history;
+create policy "Users can CRUD own rank history" on public.rank_history for all using (auth.uid() = user_id);
+
+-- ════════════════════════════════════════════════════
+-- 17. EXTERNAL ACTIVITY TABLE
+-- ════════════════════════════════════════════════════
+create table if not exists public.external_activity (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  platform text not null,
+  activity_type text not null,
+  activity_title text not null,
+  activity_link text,
+  activity_timestamp timestamptz not null,
+  metadata jsonb,
+  created_at timestamptz default now(),
+  unique(user_id, platform, activity_title, activity_timestamp) -- prevent duplicates
+);
+create index if not exists external_activity_user_time on public.external_activity(user_id, activity_timestamp desc);
+alter table public.external_activity enable row level security;
+drop policy if exists "Users can CRUD own external activity" on public.external_activity;
+create policy "Users can CRUD own external activity" on public.external_activity for all using (auth.uid() = user_id);

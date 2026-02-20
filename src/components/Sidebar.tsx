@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Terminal, CalendarDays, Route as MapRouteIcon, BarChart3, UserCircle, LogOut, Menu, X } from 'lucide-react';
+import { Terminal, CalendarDays, Route as MapRouteIcon, BarChart3, UserCircle, LogOut, Menu, X, Target, Trophy, Activity as ActivityIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 const NAV_ITEMS = [
     { to: '/', icon: Terminal, label: 'Dashboard', end: true },
     { to: '/timetable', icon: CalendarDays, label: 'Timetable' },
     { to: '/roadmap', icon: MapRouteIcon, label: 'Roadmap' },
+    { to: '/suggestions', icon: Target, label: 'Targeted Practice' },
+    { to: '/leaderboard', icon: Trophy, label: 'Leaderboard' },
+    { to: '/activity', icon: ActivityIcon, label: 'Unified Activity' },
     { to: '/statistics', icon: BarChart3, label: 'Statistics' },
     { to: '/profile', icon: UserCircle, label: 'Profile' },
 ];

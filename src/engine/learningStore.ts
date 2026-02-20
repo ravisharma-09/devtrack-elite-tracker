@@ -7,6 +7,16 @@ import { applySessionToRoadmap } from './progressEngine';
 import { syncSession, syncMicroTask, syncRoadmapTopic, syncActivityLog } from './syncEngine';
 import { useAuth } from '../auth/AuthContext';
 import type { ExternalStats } from './externalSyncEngine';
+import type { GroqTopicAnalysis } from '../ai/groqAnalyticsEngine';
+import type { GroqQuestionSuggestions } from '../ai/groqQuestionEngine';
+import type { GroqDailyPlan } from '../ai/groqPlannerEngine';
+
+export interface AIAnalyticsPayload {
+    analysis: GroqTopicAnalysis | null;
+    questions: GroqQuestionSuggestions | null;
+    plan: GroqDailyPlan | null;
+    lastUpdated: number;
+}
 
 // ─── Auto-wired hook — use this in all pages ──────────────────────────────────
 // Automatically picks up the logged-in user's ID from AuthContext so every page
@@ -26,6 +36,7 @@ function getKeys(userId: string) {
         activity: `devtrack_activity_v3_${uid}`,
         aiRec: `devtrack_ai_v3_${uid}`,
         external: `devtrack_external_${uid}`,
+        aiAnalytics: `devtrack_aianalytics_${uid}`,
     };
 }
 
@@ -50,6 +61,7 @@ export function useLearningStore(userId = 'local') {
     const [statistics, setStatistics] = useLocalStorage<Statistics>(KEYS.stats, initialStatistics);
     const [aiRecommendation, setAIRecommendation] = useLocalStorage<AIRecommendation | null>(KEYS.aiRec, null);
     const [externalStats, setExternalStats] = useLocalStorage<ExternalStats | null>(KEYS.external, null);
+    const [aiAnalytics, setAiAnalytics] = useLocalStorage<AIAnalyticsPayload | null>(KEYS.aiAnalytics, null);
 
     // ── ACTION: Add Study Session ──────────────────────────────────────────────
     // Writes to localStorage immediately, then syncs to Supabase
@@ -182,11 +194,12 @@ export function useLearningStore(userId = 'local') {
         setStatistics(initialStatistics);
         setAIRecommendation(null);
         setExternalStats(null);
+        setAiAnalytics(null);
     };
 
     return {
-        roadmap, studySessions, activityHistory, statistics, aiRecommendation, externalStats,
+        roadmap, studySessions, activityHistory, statistics, aiRecommendation, externalStats, aiAnalytics,
         addStudySession, completeMicroTask, updateTopicProgress, storeAIRecommendation, clearStore,
-        setRoadmap, setStatistics, setActivityHistory, setExternalStats
+        setRoadmap, setStatistics, setActivityHistory, setExternalStats, setAiAnalytics
     };
 }

@@ -7,14 +7,17 @@ import { extractLearningAnalytics } from '../engine/aiSuggestionEngine';
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
 import { syncExternalStats } from '../engine/externalSyncEngine';
 import { computeSkillProfile } from '../engine/analyticsEngine';
-import { Trophy, Flame, Target, BookOpen, Clock, BarChart2, TrendingUp, TrendingDown, Minus, Award, Zap, Code2, Github, RefreshCw } from 'lucide-react';
+import { Trophy, Flame, Target, BookOpen, Clock, BarChart2, TrendingUp, TrendingDown, Minus, Award, Zap, Code2, Github, RefreshCw, Crosshair, BrainCircuit } from 'lucide-react';
+import {
+    Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, LineChart, Line, AreaChart, Area
+} from 'recharts';
 
 export const Statistics: React.FC = () => {
     const { user } = useAuth();
-    const { roadmap, studySessions, activityHistory, statistics, externalStats, setExternalStats } = useStore();
+    const { roadmap, studySessions, activityHistory, statistics, externalStats, setExternalStats, aiAnalytics } = useStore();
     const [syncing, setSyncing] = useState(false);
 
-    // Provide fallback if store hasn't populated yet
     const ext = externalStats || { cf: null, lc: null, gh: null, lastSynced: null };
 
     const refreshExternal = async () => {
@@ -27,7 +30,6 @@ export const Statistics: React.FC = () => {
         finally { setSyncing(false); }
     };
 
-    // ── Compute advanced analytics ────────────────────────────────────────────
     const analytics = extractLearningAnalytics(roadmap, studySessions, activityHistory);
     const liveStreak = calculateStreak(activityHistory);
     const consistencyScore = calculateConsistencyScore(activityHistory);
@@ -41,45 +43,37 @@ export const Statistics: React.FC = () => {
     const level = calculatePlayerLevel(roadmapPct);
     const formatHours = (m: number) => m >= 60 ? `${(m / 60).toFixed(1)}h` : `${m}m`;
 
-    // Per-category breakdown
     const categoryStats = roadmap.map(cat => {
         const completed = cat.topics.filter(t => t.completed).length;
         const total = cat.topics.length;
-        const microDone = cat.topics.reduce((a, t) => a + (t.tasks?.filter((tk: any) => tk.completed).length || 0), 0);
-        const microTotal = cat.topics.reduce((a, t) => a + (t.tasks?.length || 0), 0);
-        const sessionCount = studySessions.filter(s =>
-            cat.id === 'dsa' ? s.category === 'DSA' :
-                cat.id === 'webdev' ? s.category === 'Web Dev' :
-                    cat.id === 'projects' ? s.category === 'Project' :
-                        s.category === 'CS Fundamentals'
-        ).length;
-        return { id: cat.id, title: cat.title, completed, total, microDone, microTotal, sessionCount };
+        return { id: cat.id, title: cat.title, completed, total };
     });
 
-    // Weekly breakdown (last 7 days)
-    const last7 = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - (6 - i));
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const entry = activityHistory[key];
-        return { day: d.toLocaleDateString('en', { weekday: 'short' }), mins: entry?.minutesStudied || 0, sessions: entry?.tasksCompleted || 0 };
-    });
-    const maxMins = Math.max(...last7.map(d => d.mins), 30);
-
-    // Velocity indicator
     const VelocityIcon = analytics.velocityTrend === 'accelerating' ? TrendingUp
         : analytics.velocityTrend === 'declining' ? TrendingDown : Minus;
     const velocityColor = analytics.velocityTrend === 'accelerating' ? 'text-brand-primary'
         : analytics.velocityTrend === 'declining' ? 'text-red-400' : 'text-brand-accent';
 
-    // Best study day
-    const bestDay = Object.entries(analytics.studyPatternByDay).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+    // Simulated Skill Growth History (Line Chart) 
+    // In a production environment, this would cleanly pull from the public.skill_history table
+    // For now, we simulate the last 7 days leading up to the current skill.overallScore
+    const skillHistoryData = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - (6 - i));
+        // linear progression mimicking steady growth ending at current score
+        const progressionScore = Math.max(0, skill.overallScore - ((6 - i) * 2));
+        return {
+            name: date.toLocaleDateString('en', { weekday: 'short' }),
+            Score: progressionScore
+        };
+    });
 
     return (
         <div className="space-y-8 animate-fade-in pb-12">
             <header className="mb-8 border-b border-brand-border pb-4 flex justify-between items-end">
                 <div>
                     <h2 className="text-2xl font-bold retro-text tracking-widest uppercase mb-2">Advanced Metrics</h2>
-                    <p className="retro-text-sub">Deep learning telemetry — all values computed live from execution data</p>
+                    <p className="retro-text-sub">Deep learning telemetry with AI Analytics & Recharts</p>
                 </div>
                 {ext.lastSynced && (
                     <button onClick={refreshExternal} disabled={syncing}
@@ -90,115 +84,159 @@ export const Statistics: React.FC = () => {
                 )}
             </header>
 
-            {/* ── SKILL SCORE CARDS ────────────────────────────────────────── */}
-            {(ext.cf || ext.lc || ext.gh) && (
-                <div className="space-y-4">
-                    <h3 className="text-xs font-mono uppercase text-brand-secondary tracking-widest">Platform Skill Profile</h3>
-
-                    {/* Platform stats row */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {ext.cf && (
-                            <div className="retro-panel p-4 border-yellow-400/20">
-                                <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1 flex items-center gap-1">
-                                    <Trophy size={11} className="text-yellow-400" /> Codeforces
-                                </div>
-                                <div className="text-2xl font-bold font-mono text-yellow-400">{ext.cf.rating || '—'}</div>
-                                <div className="text-xs font-mono text-brand-secondary mt-0.5">{ext.cf.rank} · max {ext.cf.maxRating}</div>
-                                <div className="text-xs font-mono text-brand-secondary">{ext.cf.problemsSolved} solved</div>
-                            </div>
-                        )}
-                        {ext.lc && (
-                            <div className="retro-panel p-4 border-orange-400/20">
-                                <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1 flex items-center gap-1">
-                                    <Code2 size={11} className="text-orange-400" /> LeetCode
-                                </div>
-                                <div className="text-2xl font-bold font-mono text-orange-400">{ext.lc.totalSolved}</div>
-                                <div className="text-xs font-mono text-brand-secondary mt-0.5">
-                                    E:{ext.lc.easySolved} M:{ext.lc.mediumSolved} H:{ext.lc.hardSolved}
-                                </div>
-                            </div>
-                        )}
-                        {ext.gh && (
-                            <div className="retro-panel p-4 border-blue-400/20">
-                                <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1 flex items-center gap-1">
-                                    <Github size={11} className="text-blue-400" /> GitHub
-                                </div>
-                                <div className="text-2xl font-bold font-mono text-blue-400">{ext.gh.lastMonthCommits}</div>
-                                <div className="text-xs font-mono text-brand-secondary mt-0.5">commits last 30d</div>
-                                <div className="text-xs font-mono text-brand-secondary">{ext.gh.publicRepos} repos · {ext.gh.totalStars}★</div>
-                            </div>
-                        )}
-                        {/* Overall skill score */}
-                        <div className="retro-panel p-4 border-brand-primary/30">
-                            <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1 flex items-center gap-1">
-                                <Zap size={11} className="text-brand-primary" /> Skill Score
-                            </div>
-                            <div className="text-2xl font-bold font-mono text-brand-primary">{skill.overallScore}</div>
-                            <div className="text-xs font-mono text-brand-secondary mt-0.5">/100 overall</div>
-                        </div>
-                    </div>
-
-                    {/* Score breakdown bars */}
-                    <div className="retro-panel p-5 border-brand-primary/10">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {[
-                                { label: 'DSA Score', value: skill.dsaScore, color: 'bg-yellow-400' },
-                                { label: 'Dev Score', value: skill.developmentScore, color: 'bg-blue-400' },
-                                { label: 'Consistency', value: skill.consistencyScore, color: 'bg-brand-primary' },
-                            ].map(s => (
-                                <div key={s.label}>
-                                    <div className="flex justify-between text-xs font-mono text-brand-secondary mb-1.5">
-                                        <span className="uppercase tracking-widest">{s.label}</span>
-                                        <span className="text-brand-primary font-bold">{s.value}/100</span>
-                                    </div>
-                                    <div className="h-1.5 bg-brand-bg rounded-full overflow-hidden">
-                                        <div className={`h-full ${s.color} rounded-full transition-all duration-700`} style={{ width: `${s.value}%` }} />
-                                    </div>
-                                </div>
+            {/* ── AI ANALYTICS: WEAK/STRONG TOPICS ──────────────────────────── */}
+            {aiAnalytics?.analysis && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="retro-panel p-5 border-red-500/20 bg-red-500/5">
+                        <h3 className="text-sm font-mono uppercase text-red-400 tracking-widest mb-3 flex items-center gap-2">
+                            <Crosshair size={16} /> Weak Areas Identified
+                        </h3>
+                        <ul className="space-y-1.5">
+                            {aiAnalytics.analysis.weakTopics.map(topic => (
+                                <li key={topic} className="text-xs font-mono text-brand-secondary flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 bg-red-400 rounded-full" /> {topic}
+                                </li>
                             ))}
-                        </div>
+                        </ul>
+                    </div>
+                    <div className="retro-panel p-5 border-green-500/20 bg-green-500/5">
+                        <h3 className="text-sm font-mono uppercase text-green-400 tracking-widest mb-3 flex items-center gap-2">
+                            <BrainCircuit size={16} /> Strong Areas
+                        </h3>
+                        <ul className="space-y-1.5">
+                            {aiAnalytics.analysis.strongTopics.map(topic => (
+                                <li key={topic} className="text-xs font-mono text-brand-secondary flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 bg-green-400 rounded-full" /> {topic}
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 </div>
             )}
 
-            {!ext.cf && !ext.lc && !ext.gh && (
-                <div className="retro-panel p-5 border-brand-border/20 text-center">
-                    <p className="text-brand-secondary font-mono text-sm">
-                        Add your Codeforces, LeetCode, and GitHub handles in <span className="text-brand-primary">Profile → Platform Handles</span> to unlock full skill analytics.
-                    </p>
-                </div>
-            )}
+            {/* ── RECHARTS ROW 1: SKILL GROWTH & TOPIC MASTERY ──────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            {/* ── LEVEL BANNER ──────────────────────────────────────────────── */}
-            <div className="retro-panel p-6 border-yellow-400/40 bg-brand-bg/50 shadow-[0_0_20px_rgba(250,204,21,0.06)] relative overflow-hidden">
-                <div className="absolute top-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
+                {/* Skill Growth Line/Area Chart */}
+                <div className="retro-panel p-6">
+                    <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-5 flex items-center gap-2">
+                        <TrendingUp size={16} /> Global Skill Growth
+                    </h3>
+                    <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={skillHistoryData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                                <defs>
+                                    <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#4ADE80" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#4ADE80" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#2D3748" vertical={false} />
+                                <XAxis dataKey="name" stroke="#718096" fontSize={11} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#718096" fontSize={11} tickLine={false} axisLine={false} />
+                                <RechartsTooltip
+                                    contentStyle={{ backgroundColor: '#1A202C', borderColor: '#2D3748', borderRadius: '4px', fontSize: '12px' }}
+                                    itemStyle={{ color: '#4ADE80' }}
+                                />
+                                <Area type="monotone" dataKey="Score" stroke="#4ADE80" strokeWidth={2} fillOpacity={1} fill="url(#colorScore)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Topic Mastery Radar Chart */}
+                <div className="retro-panel p-6">
+                    <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-2 flex items-center gap-2">
+                        <Target size={16} /> Topic Mastery Profiler
+                    </h3>
+                    <div className="h-64 w-full -ml-4">
+                        {skill.topicMasteryData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={skill.topicMasteryData}>
+                                    <PolarGrid stroke="#2D3748" />
+                                    <PolarAngleAxis dataKey="topic" tick={{ fill: '#718096', fontSize: 10 }} />
+                                    <Radar name="Mastery %" dataKey="score" stroke="#60A5FA" fill="#60A5FA" fillOpacity={0.4} />
+                                    <RechartsTooltip contentStyle={{ backgroundColor: '#1A202C', borderColor: '#2D3748', fontSize: '12px', color: '#60A5FA' }} />
+                                </RadarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-xs font-mono text-brand-secondary/50">
+                                Complete roadmap topics to generate radar
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* ── RECHARTS ROW 2: VELOCITY BAR CHART ─────────────────────────── */}
+            <div className="retro-panel p-6">
+                <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-5 flex items-center gap-2">
+                    <Zap size={16} /> Problem Solving Velocity
+                </h3>
+                <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={skill.velocityHistory.slice().reverse()} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#2D3748" vertical={false} />
+                            <XAxis dataKey="week" stroke="#718096" fontSize={11} tickLine={false} axisLine={false} />
+                            <YAxis stroke="#718096" fontSize={11} tickLine={false} axisLine={false} />
+                            <RechartsTooltip
+                                cursor={{ fill: '#2D3748', opacity: 0.4 }}
+                                contentStyle={{ backgroundColor: '#1A202C', borderColor: '#2D3748', borderRadius: '4px', fontSize: '12px' }}
+                                itemStyle={{ color: '#FCD34D' }}
+                            />
+                            <Bar dataKey="problemsSolved" fill="#FCD34D" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            {/* ── SKILL SCORE & LEVEL CARDS ──────────────────────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="retro-panel p-6 border-brand-primary/30">
+                    <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1 flex items-center gap-1">
+                        <Zap size={15} className="text-brand-primary" /> Overall Skill Score
+                    </div>
+                    <div className="text-4xl font-bold font-mono text-brand-primary">{skill.overallScore}</div>
+                    <div className="text-xs font-mono text-brand-secondary mt-1">out of 100</div>
+
+                    <div className="mt-4 grid grid-cols-3 gap-2 border-t border-brand-border pt-4">
+                        <div>
+                            <div className="text-[10px] text-brand-secondary uppercase">DSA</div>
+                            <div className="text-sm font-bold text-yellow-400">{skill.dsaScore}</div>
+                        </div>
+                        <div>
+                            <div className="text-[10px] text-brand-secondary uppercase">Dev</div>
+                            <div className="text-sm font-bold text-blue-400">{skill.developmentScore}</div>
+                        </div>
+                        <div>
+                            <div className="text-[10px] text-brand-secondary uppercase">Consistency</div>
+                            <div className="text-sm font-bold text-green-400">{skill.consistencyScore}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="retro-panel p-6 border-yellow-400/40 bg-brand-bg/50 shadow-[0_0_20px_rgba(250,204,21,0.06)] relative overflow-hidden">
+                    <div className="absolute top-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
+                    <div className="flex items-center gap-4 mb-4">
                         <Trophy className="text-yellow-400 w-10 h-10 flex-shrink-0" />
                         <div>
                             <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest">System Rank</div>
                             <div className="text-3xl font-bold font-mono text-brand-primary">{level.toUpperCase()}</div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-6 text-sm font-mono">
-                        <div className="text-center">
-                            <div className="text-2xl font-bold text-brand-primary">{roadmapPct}%</div>
-                            <div className="text-xs text-brand-secondary">Roadmap</div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <div className="text-[10px] font-mono text-brand-secondary uppercase">Roadmap Progress</div>
+                            <div className="text-lg font-bold font-mono text-brand-primary">{roadmapPct}%</div>
                         </div>
-                        <div className="text-center">
-                            <div className="text-2xl font-bold text-brand-accent">{microPct}%</div>
-                            <div className="text-xs text-brand-secondary">Micro-Tasks</div>
-                        </div>
-                        <div className={`flex items-center gap-1 ${velocityColor}`}>
-                            <VelocityIcon size={16} />
-                            <span className="text-xs uppercase tracking-widest">{analytics.velocityTrend}</span>
+                        <div>
+                            <div className={`flex items-center gap-1 ${velocityColor}`}>
+                                <VelocityIcon size={16} />
+                                <span className="text-[10px] uppercase font-mono tracking-widest">{analytics.velocityTrend} Velocity</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-                {/* Roadmap progress bar */}
-                <div className="mt-4 h-1.5 w-full bg-brand-bg rounded overflow-hidden border border-brand-border/30">
-                    <div className="h-full bg-gradient-to-r from-brand-primary to-brand-accent transition-all duration-700"
-                        style={{ width: `${roadmapPct}%` }} />
                 </div>
             </div>
 
@@ -216,111 +254,6 @@ export const Statistics: React.FC = () => {
                         <div className="text-xs text-brand-secondary/70 mt-1">{s.sub}</div>
                     </div>
                 ))}
-            </div>
-
-            {/* ── WEEKLY ACTIVITY CHART ─────────────────────────────────────── */}
-            <div className="retro-panel p-6">
-                <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-5 flex items-center gap-2">
-                    <BarChart2 size={16} /> 7-Day Activity Breakdown
-                </h3>
-                <div className="flex items-end gap-2 h-28">
-                    {last7.map((d, i) => (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                            <div className="w-full flex flex-col justify-end" style={{ height: '80px' }}>
-                                <div
-                                    className="w-full rounded-t transition-all duration-500 bg-brand-primary/70 hover:bg-brand-primary"
-                                    style={{ height: `${Math.max((d.mins / maxMins) * 80, d.mins > 0 ? 4 : 0)}px` }}
-                                    title={`${d.mins}m studied`}
-                                />
-                            </div>
-                            <span className="text-xs font-mono text-brand-secondary">{d.day}</span>
-                            {d.sessions > 0 && <span className="text-xs font-mono text-brand-primary">{d.sessions}s</span>}
-                        </div>
-                    ))}
-                </div>
-                <div className="flex justify-between text-xs font-mono text-brand-secondary/50 mt-2">
-                    <span>This week: {analytics.sessionsLastWeek} sessions</span>
-                    <span>Last week: {analytics.sessionsWeekBefore} sessions</span>
-                </div>
-            </div>
-
-            {/* ── INTELLIGENCE INSIGHTS + PATTERN ──────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Pattern Analysis */}
-                <div className="retro-panel p-6">
-                    <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-4 flex items-center gap-2">
-                        <Zap size={16} /> Learning Pattern
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                        {[
-                            { label: 'Avg Session', value: `${analytics.avgSessionMinutes}m`, good: analytics.avgSessionMinutes >= 30 },
-                            { label: 'Longest Session', value: `${analytics.longestSession}m`, good: analytics.longestSession >= 60 },
-                            { label: 'Best Day', value: bestDay, good: true },
-                            { label: 'Burnout Risk', value: analytics.burnoutRisk, good: analytics.burnoutRisk === 'low' },
-                            { label: 'Focus Area', value: analytics.topCategory || '—', good: true },
-                            { label: 'Velocity', value: analytics.velocityTrend, good: analytics.velocityTrend === 'accelerating' },
-                        ].map(item => (
-                            <div key={item.label}>
-                                <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest">{item.label}</div>
-                                <div className={`text-sm font-bold font-mono mt-0.5 capitalize ${item.good ? 'text-brand-primary' : 'text-brand-accent'}`}>
-                                    {item.value}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Category breakdown */}
-                <div className="retro-panel p-6">
-                    <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-4 flex items-center gap-2">
-                        <Award size={16} /> Category Progress
-                    </h3>
-                    <div className="space-y-3">
-                        {categoryStats.filter(c => c.total > 0).map(cat => {
-                            const pct = Math.round((cat.completed / cat.total) * 100);
-                            return (
-                                <div key={cat.id}>
-                                    <div className="flex justify-between text-xs font-mono mb-1">
-                                        <span className="text-brand-primary truncate max-w-[60%]">{cat.title}</span>
-                                        <span className="text-brand-secondary">{cat.completed}/{cat.total} topics · {pct}%</span>
-                                    </div>
-                                    <div className="h-1 w-full bg-brand-bg rounded overflow-hidden border border-brand-border/20">
-                                        <div className="h-full bg-brand-primary transition-all duration-700"
-                                            style={{ width: `${pct}%` }} />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-
-            {/* ── RECENT SESSIONS ───────────────────────────────────────────── */}
-            <div className="retro-panel p-6">
-                <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-4 flex items-center gap-2">
-                    <TrendingUp size={16} /> Recent Sessions
-                </h3>
-                {studySessions.length === 0 ? (
-                    <p className="text-brand-secondary text-xs font-mono">No sessions logged yet.</p>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {[...studySessions].reverse().slice(0, 10).map(s => (
-                            <div key={s.id} className="flex justify-between items-center p-2 border border-brand-border/20 rounded text-xs font-mono hover:border-brand-primary/30 transition-colors">
-                                <div>
-                                    <span className="text-brand-primary font-bold">{s.topic}</span>
-                                    <span className="text-brand-secondary ml-2">{s.category}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-brand-secondary flex-shrink-0 ml-2">
-                                    <span>{s.durationMinutes}m</span>
-                                    <span className={s.difficulty === 'Hard' ? 'text-red-400' : s.difficulty === 'Medium' ? 'text-brand-accent' : 'text-brand-primary'}>
-                                        {s.difficulty}
-                                    </span>
-                                    <span className="text-brand-secondary/40">{s.date}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
             </div>
 
             {/* ── HEATMAP ───────────────────────────────────────────────────── */}

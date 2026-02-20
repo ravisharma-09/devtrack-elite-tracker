@@ -11,6 +11,7 @@ import { isStale } from './analyticsEngine';
 import type { CFStats } from '../api/codeforcesApi';
 import type { LCStats } from '../api/leetcodeApi';
 import type { GHStats } from '../api/githubApi';
+import { syncCodeforcesActivity, syncLeetCodeActivity, syncGitHubActivity } from './externalActivityEngine';
 
 export interface ExternalStats {
     cf: CFStats | null;
@@ -163,6 +164,11 @@ export async function syncExternalStats(
         lc: lc ? `total=${lc.totalSolved}` : 'null',
         gh: gh ? `repos=${gh.publicRepos}, commits30d=${gh.lastMonthCommits}` : 'null',
     });
+
+    // Fire and forget unified activity fetch logic (timeline events)
+    if (handles.codeforces_handle) syncCodeforcesActivity(userId, handles.codeforces_handle).catch(console.error);
+    if (handles.leetcode_username) syncLeetCodeActivity(userId, handles.leetcode_username).catch(console.error);
+    if (handles.github_username) syncGitHubActivity(userId, handles.github_username).catch(console.error);
 
     // Save to Supabase external_stats table explicitly
     try {

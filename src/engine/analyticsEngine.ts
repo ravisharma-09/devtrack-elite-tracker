@@ -40,6 +40,10 @@ export interface SkillProfile {
 
     // Unified heatmap data: date → { devtrack, cf, gh }
     unifiedActivity: Record<string, { devtrack: boolean; cf: boolean; gh: boolean }>;
+
+    // Data for Recharts
+    topicMasteryData: { topic: string; score: number }[];
+    velocityHistory: { week: string; problemsSolved: number }[];
 }
 
 const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -112,6 +116,43 @@ export function computeSkillProfile(
     const roadmapTotal = roadmap.reduce((a, c) => a + c.topics.length, 0);
     const roadmapCompleted = roadmap.reduce((a, c) => a + c.topics.filter(t => t.completed).length, 0);
 
+    // Calculate Radar Chart Data (Topic Mastery)
+    const topicMasteryData: { topic: string; score: number }[] = [];
+    roadmap.forEach(cat => {
+        cat.topics.forEach(t => {
+            if (t.progress > 0 || t.targetCount) {
+                const target = t.targetCount || 10;
+                const score = Math.min(100, Math.round((t.progress / target) * 100));
+                topicMasteryData.push({ topic: t.title, score });
+            }
+        });
+    });
+
+    // Calculate Bar Chart Data (Velocity History - Problems Solved per Week)
+    const velocityHistoryMap: Record<string, number> = {};
+    const now = new Date();
+    // Default last 4 weeks to 0
+    for (let i = 3; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+        velocityHistoryMap[`W${Math.ceil((d.getDate()) / 7)} ${d.toLocaleString('default', { month: 'short' })}`] = 0;
+    }
+
+    // Aggregate roadmap progress instances (simplified via sessions vs activityHistory)
+    Object.keys(activityHistory).forEach(dateStr => {
+        const d = new Date(dateStr);
+        if (now.getTime() - d.getTime() <= 30 * 24 * 60 * 60 * 1000) {
+            const weekLabel = `W${Math.ceil((d.getDate()) / 7)} ${d.toLocaleString('default', { month: 'short' })}`;
+            if (velocityHistoryMap[weekLabel] !== undefined) {
+                velocityHistoryMap[weekLabel] += activityHistory[dateStr].tasksCompleted;
+            }
+        }
+    });
+
+    const velocityHistory = Object.keys(velocityHistoryMap).map(k => ({
+        week: k,
+        problemsSolved: velocityHistoryMap[k]
+    }));
+
     const cfRating = cf?.rating ?? 0;
     const lcTotal = lc?.totalSolved ?? 0;
     const dsaScore = computeDSAScore(cfRating, lcTotal, roadmapCompleted, roadmapTotal);
@@ -154,6 +195,8 @@ export function computeSkillProfile(
         learningVelocity: velocity,
         overallScore: overall,
         unifiedActivity,
+        topicMasteryData,
+        velocityHistory
     };
 }
 
