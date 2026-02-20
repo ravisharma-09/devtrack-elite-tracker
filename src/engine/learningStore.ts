@@ -18,6 +18,8 @@ export interface AIRecommendation {
     topic: string;
     reason: string;
     estimatedTime: string;
+    urgency: 'high' | 'medium' | 'low';
+    coachingNote: string;
     cachedAt: number;
 }
 
