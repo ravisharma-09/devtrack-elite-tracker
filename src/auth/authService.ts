@@ -17,7 +17,7 @@ export async function verifyEmailOtp(email: string, token: string) {
     const supabase = await getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');
     const { data, error } = await supabase.auth.verifyOtp({
-        email, token, type: 'signup',
+        email, token, type: 'email',
     });
     if (error) throw error;
     return data;
