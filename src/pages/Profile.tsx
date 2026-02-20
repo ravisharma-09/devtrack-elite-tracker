@@ -52,18 +52,29 @@ export const Profile: React.FC = () => {
         if (!user?.id) return;
         setSavingHandles(true);
         setSyncMsg('');
+        const handles = {
+            codeforces_handle: cfHandle.trim(),
+            leetcode_username: lcUsername.trim(),
+            github_username: ghUsername.trim(),
+        };
+        if (!handles.codeforces_handle && !handles.leetcode_username && !handles.github_username) {
+            setSyncMsg('Enter at least one handle first.');
+            setSavingHandles(false); return;
+        }
         try {
-            await saveUserHandles(user.id, {
-                codeforces_handle: cfHandle.trim(),
-                leetcode_username: lcUsername.trim(),
-                github_username: ghUsername.trim(),
-            });
-            setSyncMsg('Handles saved! Syncing stats now...');
+            setSyncMsg('Saving handles...');
+            const saved = await saveUserHandles(user.id, handles);
+            setSyncMsg(saved ? 'Saved to Supabase ✓ — fetching stats...' : 'Could not save to DB (schema not applied?), fetching anyway...');
             setSyncing(true);
-            await syncExternalStats(user.id, true);
-            setSyncMsg('✓ Stats synced! Check Statistics page.');
-        } catch {
-            setSyncMsg('Saved handles, but sync failed — try refreshing.');
+            // Pass handles directly — don't re-read from Supabase (circular bug avoided)
+            const result = await syncExternalStats(user.id, true, handles);
+            if (result.cf || result.lc || result.gh) {
+                setSyncMsg(`✓ Done! Check Statistics page. ${[result.cf && 'CF', result.lc && 'LC', result.gh && 'GH'].filter(Boolean).join(', ')} synced.`);
+            } else {
+                setSyncMsg('⚠ Fetched but got no data. Check handles are correct + open DevTools console for details.');
+            }
+        } catch (e: any) {
+            setSyncMsg(`Error: ${e?.message || 'Unknown error'}. Check DevTools console.`);
         } finally {
             setSavingHandles(false); setSyncing(false);
         }
@@ -73,10 +84,15 @@ export const Profile: React.FC = () => {
         if (!user?.id || syncing) return;
         setSyncing(true); setSyncMsg('Syncing...');
         try {
-            await syncExternalStats(user.id, true);
-            setSyncMsg('✓ Synced! Stats updated.');
-        } catch { setSyncMsg('Sync failed — check your handles.'); }
-        finally { setSyncing(false); }
+            const result = await syncExternalStats(user.id, true);
+            if (result.cf || result.lc || result.gh) {
+                setSyncMsg(`✓ Synced! Check Statistics page.`);
+            } else {
+                setSyncMsg('⚠ No data returned. Verify handles in Profile and check DevTools console.');
+            }
+        } catch (e: any) {
+            setSyncMsg(`Sync error: ${e?.message || 'Unknown'}. Check DevTools console.`);
+        } finally { setSyncing(false); }
     };
 
     // Stats

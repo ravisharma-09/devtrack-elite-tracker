@@ -1,7 +1,7 @@
 // ─── External Sync Engine ─────────────────────────────────────────────────────
 // Fetches Codeforces, LeetCode, and GitHub stats for the current user.
-// Caches results in Supabase and skips refetch if data is < 24h old.
-// Called on login and on manual "Refresh" trigger from Profile/Statistics.
+// Key design: handles can be passed directly so we never have a circular
+// dependency (save handles → read handles → fetch → get empty result).
 
 import { getSupabaseClient } from '../backend/supabaseClient';
 import { fetchCodeforcesStats, saveCFStatsToSupabase, loadCFStats } from '../api/codeforcesApi';
@@ -19,11 +19,17 @@ export interface ExternalStats {
     lastSynced: number | null;
 }
 
-const CACHE_KEY = (uid: string) => `devtrack_external_${uid}`;
+interface Handles {
+    codeforces_handle: string;
+    leetcode_username: string;
+    github_username: string;
+}
 
-// ─── Load all external stats from Supabase (cached) ──────────────────────────
+const CACHE_KEY = (uid: string) => `devtrack_external_${uid}`;
+const HANDLES_KEY = (uid: string) => `devtrack_handles_${uid}`;
+
+// ─── Load all external stats (localStorage cache first, then Supabase) ────────
 export async function loadExternalStats(userId: string): Promise<ExternalStats> {
-    // Fast path: check localStorage cache first
     try {
         const cached = localStorage.getItem(CACHE_KEY(userId));
         if (cached) {
@@ -42,73 +48,122 @@ export async function loadExternalStats(userId: string): Promise<ExternalStats> 
     ]);
 
     const result: ExternalStats = { cf, lc, gh, lastSynced: cf?.lastSynced ?? lc?.lastSynced ?? null };
-    // Write to localStorage cache
     try { localStorage.setItem(CACHE_KEY(userId), JSON.stringify(result)); } catch { }
     return result;
 }
 
-// ─── Get platform handles from Supabase users table ──────────────────────────
-export async function loadUserHandles(userId: string): Promise<{
-    codeforces_handle: string;
-    leetcode_username: string;
-    github_username: string;
-}> {
+// ─── Get handles from Supabase with localStorage fallback ─────────────────────
+export async function loadUserHandles(userId: string): Promise<Handles> {
+    const empty: Handles = { codeforces_handle: '', leetcode_username: '', github_username: '' };
     const supabase = await getSupabaseClient();
-    if (!supabase) return { codeforces_handle: '', leetcode_username: '', github_username: '' };
-    const { data } = await supabase.from('users').select('codeforces_handle, leetcode_username, github_username').eq('id', userId).single();
-    return {
-        codeforces_handle: data?.codeforces_handle ?? '',
-        leetcode_username: data?.leetcode_username ?? '',
-        github_username: data?.github_username ?? '',
-    };
+
+    if (supabase) {
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('codeforces_handle, leetcode_username, github_username')
+                .eq('id', userId)
+                .single();
+            if (!error && data) {
+                const fromDB = {
+                    codeforces_handle: data.codeforces_handle ?? '',
+                    leetcode_username: data.leetcode_username ?? '',
+                    github_username: data.github_username ?? '',
+                };
+                // Also cache locally
+                try { localStorage.setItem(HANDLES_KEY(userId), JSON.stringify(fromDB)); } catch { }
+                return fromDB;
+            }
+        } catch { }
+    }
+
+    // Fallback: localStorage (handles saved from Profile even if DB columns missing)
+    try {
+        const local = localStorage.getItem(HANDLES_KEY(userId));
+        if (local) return JSON.parse(local);
+    } catch { }
+
+    return empty;
 }
 
-// ─── Save platform handles ────────────────────────────────────────────────────
-export async function saveUserHandles(userId: string, handles: {
-    codeforces_handle: string;
-    leetcode_username: string;
-    github_username: string;
-}): Promise<void> {
+// ─── Save platform handles — uses UPDATE (row always exists from signup trigger)
+export async function saveUserHandles(userId: string, handles: Handles): Promise<boolean> {
+    // Always save to localStorage first (works even if Supabase columns don't exist)
+    try { localStorage.setItem(HANDLES_KEY(userId), JSON.stringify(handles)); } catch { }
+
     const supabase = await getSupabaseClient();
-    if (!supabase) return;
-    await supabase.from('users').upsert({ id: userId, ...handles });
+    if (!supabase) return false;
+
+    const { error } = await supabase
+        .from('users')
+        .update(handles)
+        .eq('id', userId);
+
+    if (error) {
+        console.warn('[DevTrack] saveUserHandles Supabase error (schema may need update):', error.message);
+        return false; // localStorage already saved above — sync will still work
+    }
+    return true;
 }
 
-// ─── Full sync (force-refreshes from external APIs) ──────────────────────────
-export async function syncExternalStats(userId: string, force = false): Promise<ExternalStats> {
+// ─── Full sync — pass handles directly to avoid Supabase column dependency ────
+// handleOverrides: handles typed in the UI, bypass DB lookup
+export async function syncExternalStats(
+    userId: string,
+    force = false,
+    handleOverrides?: Partial<Handles>
+): Promise<ExternalStats> {
     const supabase = await getSupabaseClient();
     if (!supabase) return { cf: null, lc: null, gh: null, lastSynced: null };
 
-    // Check if sync needed
     if (!force) {
         const existing = await loadExternalStats(userId);
         if (!isStale(existing.lastSynced ?? 0)) return existing;
     }
 
-    const handles = await loadUserHandles(userId);
+    // Resolve handles: overrides > Supabase/localStorage
+    let handles: Handles;
+    if (handleOverrides && (handleOverrides.codeforces_handle !== undefined || handleOverrides.leetcode_username !== undefined || handleOverrides.github_username !== undefined)) {
+        handles = {
+            codeforces_handle: handleOverrides.codeforces_handle ?? '',
+            leetcode_username: handleOverrides.leetcode_username ?? '',
+            github_username: handleOverrides.github_username ?? '',
+        };
+    } else {
+        handles = await loadUserHandles(userId);
+    }
 
-    // Fetch all 3 in parallel (don't fail if one is missing)
+    console.log('[DevTrack] syncExternalStats — handles:', {
+        cf: handles.codeforces_handle || '(none)',
+        lc: handles.leetcode_username || '(none)',
+        gh: handles.github_username || '(none)',
+    });
+
     const [cf, lc, gh] = await Promise.all([
         handles.codeforces_handle ? fetchCodeforcesStats(handles.codeforces_handle) : Promise.resolve(null),
         handles.leetcode_username ? fetchLeetCodeStats(handles.leetcode_username) : Promise.resolve(null),
         handles.github_username ? fetchGitHubStats(handles.github_username) : Promise.resolve(null),
     ]);
 
-    // Save to Supabase (fire-and-forget)
-    const saveOps = [];
-    if (cf) saveOps.push(saveCFStatsToSupabase(userId, cf, supabase));
-    if (lc) saveOps.push(saveLCStatsToSupabase(userId, lc, supabase));
-    if (gh) saveOps.push(saveGHStatsToSupabase(userId, gh, supabase));
-    await Promise.allSettled(saveOps);
+    console.log('[DevTrack] syncExternalStats — results:', {
+        cf: cf ? `rating=${cf.rating}, solved=${cf.problemsSolved}` : 'null',
+        lc: lc ? `total=${lc.totalSolved}` : 'null',
+        gh: gh ? `repos=${gh.publicRepos}, commits30d=${gh.lastMonthCommits}` : 'null',
+    });
+
+    // Save to Supabase — may fail if tables not created yet, but localStorage cache still works
+    const saves: Promise<any>[] = [];
+    if (cf) saves.push(saveCFStatsToSupabase(userId, cf, supabase).catch(e => console.warn('[DevTrack] CF Supabase save:', e.message)));
+    if (lc) saves.push(saveLCStatsToSupabase(userId, lc, supabase).catch(e => console.warn('[DevTrack] LC Supabase save:', e.message)));
+    if (gh) saves.push(saveGHStatsToSupabase(userId, gh, supabase).catch(e => console.warn('[DevTrack] GH Supabase save:', e.message)));
+    await Promise.allSettled(saves);
 
     const result: ExternalStats = { cf, lc, gh, lastSynced: Date.now() };
-    // Update localStorage cache
     try { localStorage.setItem(CACHE_KEY(userId), JSON.stringify(result)); } catch { }
-
     return result;
 }
 
-// ─── Sync if stale — called on login (non-blocking) ──────────────────────────
+// ─── Sync if stale — called on login (non-blocking background) ────────────────
 export function syncIfStale(userId: string): void {
     loadExternalStats(userId).then(existing => {
         if (isStale(existing.lastSynced ?? 0)) {
