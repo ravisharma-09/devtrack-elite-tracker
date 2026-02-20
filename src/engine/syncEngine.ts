@@ -1,10 +1,8 @@
 import { getSupabaseClient } from '../backend/supabaseClient';
 import type { StudySession, ActivityHistory } from '../types';
 
-const USER_ID = 'local'; // Replace with auth user ID when auth is added
 const MAX_RETRIES = 3;
 
-// ─── Generic retry helper ──────────────────────────────────────────────────────
 async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promise<T> {
     try {
         return await fn();
@@ -15,15 +13,15 @@ async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promis
     }
 }
 
-// ─── Sync a Study Session to Backend ─────────────────────────────────────────
-export async function syncSession(session: StudySession): Promise<void> {
+// ─── Sync a Study Session ─────────────────────────────────────────────────────
+export async function syncSession(session: StudySession, userId = 'local'): Promise<void> {
     const supabase = await getSupabaseClient();
-    if (!supabase) return; // Offline mode
+    if (!supabase) return;
 
     await withRetry(async () => {
         const { error } = await supabase.from('study_sessions').upsert({
             id: session.id,
-            user_id: USER_ID,
+            user_id: userId,
             topic: session.topic,
             category: session.category,
             duration_minutes: session.durationMinutes,
@@ -35,15 +33,15 @@ export async function syncSession(session: StudySession): Promise<void> {
     });
 }
 
-// ─── Sync Activity Log to Backend ─────────────────────────────────────────────
-export async function syncActivityLog(date: string, entry: ActivityHistory[string]): Promise<void> {
+// ─── Sync Activity Log ────────────────────────────────────────────────────────
+export async function syncActivityLog(date: string, entry: ActivityHistory[string], userId = 'local'): Promise<void> {
     const supabase = await getSupabaseClient();
     if (!supabase) return;
 
     await withRetry(async () => {
         const { error } = await supabase.from('activity_log').upsert({
-            id: `${USER_ID}_${date}`,
-            user_id: USER_ID,
+            id: `${userId}_${date}`,
+            user_id: userId,
             date,
             minutes_studied: entry.minutesStudied,
             tasks_completed: entry.tasksCompleted,
@@ -54,14 +52,14 @@ export async function syncActivityLog(date: string, entry: ActivityHistory[strin
 }
 
 // ─── Sync Micro-Task Completion ───────────────────────────────────────────────
-export async function syncMicroTask(topicId: string, taskId: string, completed: boolean): Promise<void> {
+export async function syncMicroTask(topicId: string, taskId: string, completed: boolean, userId = 'local'): Promise<void> {
     const supabase = await getSupabaseClient();
     if (!supabase) return;
 
     await withRetry(async () => {
         const { error } = await supabase.from('microtask_progress').upsert({
-            id: `${USER_ID}_${taskId}`,
-            user_id: USER_ID,
+            id: `${userId}_${taskId}`,
+            user_id: userId,
             topic_id: topicId,
             task_id: taskId,
             completed,
@@ -70,8 +68,8 @@ export async function syncMicroTask(topicId: string, taskId: string, completed: 
     });
 }
 
-// ─── Load All Data from Backend (for future auth flow) ───────────────────────
-export async function loadFromBackend(): Promise<{
+// ─── Load All Data from Backend ───────────────────────────────────────────────
+export async function loadFromBackend(userId: string): Promise<{
     sessions: StudySession[];
     activityLog: ActivityHistory;
 } | null> {
@@ -80,18 +78,14 @@ export async function loadFromBackend(): Promise<{
 
     try {
         const [sessionsResult, activityResult] = await Promise.all([
-            supabase.from('study_sessions').select('*').eq('user_id', USER_ID),
-            supabase.from('activity_log').select('*').eq('user_id', USER_ID),
+            supabase.from('study_sessions').select('*').eq('user_id', userId),
+            supabase.from('activity_log').select('*').eq('user_id', userId),
         ]);
 
         const sessions: StudySession[] = (sessionsResult.data || []).map((r: any) => ({
-            id: r.id,
-            topic: r.topic,
-            category: r.category,
-            durationMinutes: r.duration_minutes,
-            difficulty: r.difficulty,
-            notes: r.notes,
-            date: r.date,
+            id: r.id, topic: r.topic, category: r.category,
+            durationMinutes: r.duration_minutes, difficulty: r.difficulty,
+            notes: r.notes, date: r.date,
             timestamp: new Date(r.created_at).getTime(),
         }));
 
@@ -105,7 +99,5 @@ export async function loadFromBackend(): Promise<{
         });
 
         return { sessions, activityLog };
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
