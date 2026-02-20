@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-brand-bg: #0b0f1a;
+  --color-brand-card: #111827;
+  --color-brand-border: #1f2937;
+  --color-brand-primary: #22c55e;
+  --color-brand-secondary: #94a3b8;
+  --color-brand-accent: #f59e0b;
+  --font-jetbrains: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-brand-border);
+  }
+  
+  body {
+    background-color: var(--color-brand-bg);
+    color: var(--color-brand-primary);
+    font-family: var(--font-jetbrains);
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Custom scrollbar for retro terminal feel */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-brand-bg);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-brand-border);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-brand-secondary);
+  }
+}
+
+/* Utilities for retro looking boxes */
+@layer utilities {
+  .retro-panel {
+    @apply bg-brand-card border border-brand-border rounded shadow-md;
+  }
+  .retro-text {
+    @apply text-brand-primary;
+  }
+  .retro-text-sub {
+    @apply text-brand-secondary;
+  }
+  .retro-accent {
+    @apply text-brand-accent font-bold;
+  }
+  .retro-input {
+    @apply bg-brand-bg border border-brand-border rounded focus:outline-none focus:border-brand-primary text-brand-primary px-3 py-2;
+  }
+  .retro-button {
+    @apply px-4 py-2 border border-brand-primary text-brand-primary rounded hover:bg-brand-primary hover:text-brand-bg transition-colors duration-200;
+  }
+}
