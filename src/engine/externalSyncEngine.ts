@@ -4,9 +4,9 @@
 // dependency (save handles → read handles → fetch → get empty result).
 
 import { getSupabaseClient } from '../backend/supabaseClient';
-import { fetchCodeforcesStats, saveCFStatsToSupabase, loadCFStats } from '../api/codeforcesApi';
-import { fetchLeetCodeStats, saveLCStatsToSupabase, loadLCStats } from '../api/leetcodeApi';
-import { fetchGitHubStats, saveGHStatsToSupabase, loadGHStats } from '../api/githubApi';
+import { fetchCodeforcesStats } from '../api/codeforcesApi';
+import { fetchLeetCodeStats } from '../api/leetcodeApi';
+import { fetchGitHubStats } from '../api/githubApi';
 import { isStale } from './analyticsEngine';
 import type { CFStats } from '../api/codeforcesApi';
 import type { LCStats } from '../api/leetcodeApi';
@@ -41,13 +41,23 @@ export async function loadExternalStats(userId: string): Promise<ExternalStats> 
     const supabase = await getSupabaseClient();
     if (!supabase) return { cf: null, lc: null, gh: null, lastSynced: null };
 
-    const [cf, lc, gh] = await Promise.all([
-        loadCFStats(userId, supabase),
-        loadLCStats(userId, supabase),
-        loadGHStats(userId, supabase),
-    ]);
+    let result: ExternalStats = { cf: null, lc: null, gh: null, lastSynced: null };
+    try {
+        const { data, error } = await supabase
+            .from('external_stats')
+            .select('cf, lc, gh, last_synced')
+            .eq('user_id', userId)
+            .single();
+        if (!error && data) {
+            result = {
+                cf: data.cf,
+                lc: data.lc,
+                gh: data.gh,
+                lastSynced: new Date(data.last_synced).getTime()
+            };
+        }
+    } catch { }
 
-    const result: ExternalStats = { cf, lc, gh, lastSynced: cf?.lastSynced ?? lc?.lastSynced ?? null };
     try { localStorage.setItem(CACHE_KEY(userId), JSON.stringify(result)); } catch { }
     return result;
 }
@@ -86,7 +96,7 @@ export async function loadUserHandles(userId: string): Promise<Handles> {
     return empty;
 }
 
-// ─── Save platform handles — uses UPDATE (row always exists from signup trigger)
+// ─── Save platform handles — uses UPSERT (row created if missing)
 export async function saveUserHandles(userId: string, handles: Handles): Promise<boolean> {
     // Always save to localStorage first (works even if Supabase columns don't exist)
     try { localStorage.setItem(HANDLES_KEY(userId), JSON.stringify(handles)); } catch { }
@@ -94,10 +104,13 @@ export async function saveUserHandles(userId: string, handles: Handles): Promise
     const supabase = await getSupabaseClient();
     if (!supabase) return false;
 
+    // Use upsert instead of update in case the user row doesn't exist yet/was deleted
     const { error } = await supabase
         .from('users')
-        .update(handles)
-        .eq('id', userId);
+        .upsert({
+            id: userId,
+            ...handles
+        });
 
     if (error) {
         console.warn('[DevTrack] saveUserHandles Supabase error (schema may need update):', error.message);
@@ -151,12 +164,18 @@ export async function syncExternalStats(
         gh: gh ? `repos=${gh.publicRepos}, commits30d=${gh.lastMonthCommits}` : 'null',
     });
 
-    // Save to Supabase — may fail if tables not created yet, but localStorage cache still works
-    const saves: Promise<any>[] = [];
-    if (cf) saves.push(saveCFStatsToSupabase(userId, cf, supabase).catch(e => console.warn('[DevTrack] CF Supabase save:', e.message)));
-    if (lc) saves.push(saveLCStatsToSupabase(userId, lc, supabase).catch(e => console.warn('[DevTrack] LC Supabase save:', e.message)));
-    if (gh) saves.push(saveGHStatsToSupabase(userId, gh, supabase).catch(e => console.warn('[DevTrack] GH Supabase save:', e.message)));
-    await Promise.allSettled(saves);
+    // Save to Supabase external_stats table explicitly
+    try {
+        await supabase.from('external_stats').upsert({
+            user_id: userId,
+            cf: cf || null,
+            lc: lc || null,
+            gh: gh || null,
+            last_synced: new Date().toISOString()
+        });
+    } catch (e: any) {
+        console.warn('[DevTrack] Supabase external_stats save failed (schema may need update):', e.message);
+    }
 
     const result: ExternalStats = { cf, lc, gh, lastSynced: Date.now() };
     try { localStorage.setItem(CACHE_KEY(userId), JSON.stringify(result)); } catch { }

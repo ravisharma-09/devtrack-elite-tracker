@@ -1,9 +1,7 @@
 import type { RoadmapCategory, StudySession, ActivityHistory } from '../types';
 import type { AIRecommendation } from './learningStore';
 import { calculateConsistencyScore, calculateStreak } from './consistencyEngine';
-import type { CFStats } from '../api/codeforcesApi';
-import type { LCStats } from '../api/leetcodeApi';
-import type { GHStats } from '../api/githubApi';
+import type { ExternalStats } from './externalSyncEngine';
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -133,14 +131,16 @@ export function extractLearningAnalytics(
 function buildPrompt(
     analytics: LearningAnalytics,
     sessions: StudySession[],
-    cf?: CFStats | null,
-    lc?: LCStats | null,
-    gh?: GHStats | null
+    externalStats?: ExternalStats | null
 ): string {
     const completionPct = analytics.totalTopics > 0
         ? Math.round((analytics.completedTopics / analytics.totalTopics) * 100) : 0;
     const microTaskPct = analytics.totalMicroTasks > 0
         ? Math.round((analytics.completedMicroTasks / analytics.totalMicroTasks) * 100) : 0;
+
+    const cf = externalStats?.cf;
+    const lc = externalStats?.lc;
+    const gh = externalStats?.gh;
 
     const externalBlock = (cf || lc || gh) ? `
 ## EXTERNAL PLATFORM STATS
@@ -252,14 +252,12 @@ export async function getAIRecommendation(
     sessions: StudySession[],
     activityHistory: ActivityHistory,
     cached: AIRecommendation | null,
-    cf?: CFStats | null,
-    lc?: LCStats | null,
-    gh?: GHStats | null
+    externalStats?: ExternalStats | null
 ): Promise<AIRecommendation> {
     if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) return cached;
 
     const analytics = extractLearningAnalytics(roadmap, sessions, activityHistory);
-    const prompt = buildPrompt(analytics, sessions, cf, lc, gh);
+    const prompt = buildPrompt(analytics, sessions, externalStats);
     const groqResult = await callGroqAPI(prompt);
 
     if (groqResult?.topic) {

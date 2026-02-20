@@ -5,26 +5,25 @@ import { calculatePlayerLevel } from '../data/statisticsData';
 import { calculateConsistencyScore, calculateStreak } from '../engine/consistencyEngine';
 import { extractLearningAnalytics } from '../engine/aiSuggestionEngine';
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
-import { loadExternalStats, syncExternalStats } from '../engine/externalSyncEngine';
+import { syncExternalStats } from '../engine/externalSyncEngine';
 import { computeSkillProfile } from '../engine/analyticsEngine';
-import type { ExternalStats } from '../engine/externalSyncEngine';
 import { Trophy, Flame, Target, BookOpen, Clock, BarChart2, TrendingUp, TrendingDown, Minus, Award, Zap, Code2, Github, RefreshCw } from 'lucide-react';
 
 export const Statistics: React.FC = () => {
     const { user } = useAuth();
-    const { roadmap, studySessions, activityHistory, statistics } = useStore();
-    const [ext, setExt] = useState<ExternalStats>({ cf: null, lc: null, gh: null, lastSynced: null });
+    const { roadmap, studySessions, activityHistory, statistics, externalStats, setExternalStats } = useStore();
     const [syncing, setSyncing] = useState(false);
 
-    useEffect(() => {
-        if (!user?.id) return;
-        loadExternalStats(user.id).then(setExt).catch(() => { });
-    }, [user?.id]);
+    // Provide fallback if store hasn't populated yet
+    const ext = externalStats || { cf: null, lc: null, gh: null, lastSynced: null };
 
     const refreshExternal = async () => {
         if (!user?.id || syncing) return;
         setSyncing(true);
-        try { const fresh = await syncExternalStats(user.id, true); setExt(fresh); } catch { }
+        try {
+            const fresh = await syncExternalStats(user.id, true);
+            setExternalStats(fresh);
+        } catch { }
         finally { setSyncing(false); }
     };
 

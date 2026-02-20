@@ -1,15 +1,32 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { ActivityHistory } from '../types';
 
 interface ConsistencyGraphProps {
     daysToView: number;
     activityHistory: ActivityHistory;
-    // External activity dates (YYYY-MM-DD) from CF + GH/LC submissions
     cfDates?: string[];
     ghDates?: string[];
 }
 
 type ActivitySource = { devtrack: boolean; cf: boolean; gh: boolean };
+
+// Adaptive: reduce days shown on small screens to avoid horizontal overflow
+function useAdaptiveDays(requested: number): number {
+    const [days, setDays] = useState(Math.min(requested, 90));
+    useEffect(() => {
+        const calc = () => {
+            const w = window.innerWidth;
+            if (w < 480) setDays(Math.min(requested, 60));
+            else if (w < 768) setDays(Math.min(requested, 120));
+            else if (w < 1024) setDays(Math.min(requested, 180));
+            else setDays(requested);
+        };
+        calc();
+        window.addEventListener('resize', calc);
+        return () => window.removeEventListener('resize', calc);
+    }, [requested]);
+    return days;
+}
 
 export const ConsistencyGraph: React.FC<ConsistencyGraphProps> = ({
     daysToView,
@@ -17,8 +34,9 @@ export const ConsistencyGraph: React.FC<ConsistencyGraphProps> = ({
     cfDates = [],
     ghDates = [],
 }) => {
+    const adaptedDays = useAdaptiveDays(daysToView);
     const today = new Date();
-    const dates = Array.from({ length: daysToView }).map((_, i) => {
+    const dates = Array.from({ length: adaptedDays }).map((_, i) => {
         const d = new Date(today);
         d.setDate(today.getDate() - (daysToView - 1) + i);
         const year = d.getFullYear();

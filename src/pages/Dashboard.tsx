@@ -13,7 +13,7 @@ import { Brain, Clock, PlusCircle, Target, Flame, TrendingUp, Zap, AlertTriangle
 export const Dashboard: React.FC = () => {
     const [timetable] = useLocalStorage<DailyTimetable[]>('devtrack_timetable', initialTimetable);
     const {
-        roadmap, studySessions, activityHistory, statistics,
+        roadmap, studySessions, activityHistory, statistics, externalStats,
         aiRecommendation, storeAIRecommendation, addStudySession,
     } = useStore();
 
@@ -38,14 +38,21 @@ export const Dashboard: React.FC = () => {
         : displayRec?.urgency === 'low' ? CheckCircle : Zap;
 
     useEffect(() => {
-        const shouldFetch = !aiRecommendation || (Date.now() - aiRecommendation.cachedAt > 3600000);
+        const extTime = externalStats?.lastSynced || 0;
+        const aiTime = aiRecommendation?.cachedAt || 0;
+        const isStale = Date.now() - aiTime > 3600000;
+        const needsExternalUpdate = extTime > aiTime; // external DB synced after we got AI advice
+
+        const shouldFetch = !aiRecommendation || isStale || needsExternalUpdate;
         if (!shouldFetch) return;
+
         setIsLoadingAI(true);
-        getAIRecommendation(roadmap, studySessions, activityHistory, aiRecommendation)
+        // Pass null for cached if we explicitly need a fresh update for new external stats
+        getAIRecommendation(roadmap, studySessions, activityHistory, needsExternalUpdate ? null : aiRecommendation, externalStats)
             .then(rec => storeAIRecommendation(rec))
             .catch(() => { })
             .finally(() => setIsLoadingAI(false));
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [externalStats?.lastSynced]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const totalTopics = roadmap.reduce((a, c) => a + c.topics.length, 0);
     const completedTopics = roadmap.reduce((a, c) => a + c.topics.filter(t => t.completed).length, 0);

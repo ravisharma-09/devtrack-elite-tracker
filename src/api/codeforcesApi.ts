@@ -76,34 +76,3 @@ export async function fetchCodeforcesStats(handle: string): Promise<CFStats | nu
     }
 }
 
-// ─── Save CF stats to Supabase ────────────────────────────────────────────────
-export async function saveCFStatsToSupabase(userId: string, stats: CFStats, supabase: any): Promise<void> {
-    await supabase.from('codeforces_stats').upsert({
-        user_id: userId,
-        handle: stats.handle,
-        rating: stats.rating,
-        max_rating: stats.maxRating,
-        rank: stats.rank,
-        problems_solved: stats.problemsSolved,
-        total_submissions: stats.totalSubmissions,
-        recent_dates: stats.recentSubmissionDates,
-        last_synced: new Date().toISOString(),
-    });
-}
-
-// ─── Load CF stats from Supabase ──────────────────────────────────────────────
-export async function loadCFStats(userId: string, supabase: any): Promise<CFStats | null> {
-    const { data } = await supabase.from('codeforces_stats').select('*').eq('user_id', userId).single();
-    if (!data) return null;
-    return {
-        handle: data.handle,
-        rating: data.rating,
-        maxRating: data.max_rating,
-        rank: data.rank,
-        maxRank: data.rank,
-        problemsSolved: data.problems_solved,
-        totalSubmissions: data.total_submissions,
-        recentSubmissionDates: data.recent_dates || [],
-        lastSynced: new Date(data.last_synced).getTime(),
-    };
-}

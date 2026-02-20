@@ -95,36 +95,3 @@ export async function fetchGitHubStats(username: string): Promise<GHStats | null
     }
 }
 
-// ─── Save GH stats to Supabase ────────────────────────────────────────────────
-export async function saveGHStatsToSupabase(userId: string, stats: GHStats, supabase: any): Promise<void> {
-    await supabase.from('github_stats').upsert({
-        user_id: userId,
-        username: stats.username,
-        public_repos: stats.publicRepos,
-        followers: stats.followers,
-        total_stars: stats.totalStars,
-        total_commits_estimate: stats.totalCommitsEstimate,
-        last_month_commits: stats.lastMonthCommits,
-        contribution_dates: stats.contributionDates,
-        top_languages: stats.topLanguages,
-        last_synced: new Date().toISOString(),
-    });
-}
-
-// ─── Load GH stats from Supabase ──────────────────────────────────────────────
-export async function loadGHStats(userId: string, supabase: any): Promise<GHStats | null> {
-    const { data } = await supabase.from('github_stats').select('*').eq('user_id', userId).single();
-    if (!data) return null;
-    return {
-        username: data.username,
-        publicRepos: data.public_repos,
-        followers: data.followers,
-        following: 0,
-        totalStars: data.total_stars,
-        totalCommitsEstimate: data.total_commits_estimate,
-        lastMonthCommits: data.last_month_commits,
-        contributionDates: data.contribution_dates || [],
-        topLanguages: data.top_languages || [],
-        lastSynced: new Date(data.last_synced).getTime(),
-    };
-}

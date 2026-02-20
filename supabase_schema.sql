@@ -14,8 +14,11 @@ create table if not exists public.users (
   created_at timestamptz default now()
 );
 alter table public.users enable row level security;
+drop policy if exists "Users can view own profile" on public.users;
 create policy "Users can view own profile" on public.users for select using (auth.uid() = id);
+drop policy if exists "Users can update own profile" on public.users;
 create policy "Users can update own profile" on public.users for update using (auth.uid() = id);
+drop policy if exists "Users can insert own profile" on public.users;
 create policy "Users can insert own profile" on public.users for insert with check (auth.uid() = id);
 
 -- ════════════════════════════════════════════════════
@@ -34,6 +37,7 @@ create table if not exists public.study_sessions (
 );
 create index if not exists study_sessions_user_date on public.study_sessions(user_id, date);
 alter table public.study_sessions enable row level security;
+drop policy if exists "Users can CRUD own sessions" on public.study_sessions;
 create policy "Users can CRUD own sessions" on public.study_sessions for all using (auth.uid() = user_id);
 
 -- ════════════════════════════════════════════════════
@@ -51,6 +55,7 @@ create table if not exists public.roadmap_progress (
 );
 create index if not exists roadmap_progress_user on public.roadmap_progress(user_id);
 alter table public.roadmap_progress enable row level security;
+drop policy if exists "Users can CRUD own roadmap" on public.roadmap_progress;
 create policy "Users can CRUD own roadmap" on public.roadmap_progress for all using (auth.uid() = user_id);
 
 -- ════════════════════════════════════════════════════
@@ -67,6 +72,7 @@ create table if not exists public.microtask_progress (
 );
 create index if not exists microtask_progress_user on public.microtask_progress(user_id);
 alter table public.microtask_progress enable row level security;
+drop policy if exists "Users can CRUD own microtasks" on public.microtask_progress;
 create policy "Users can CRUD own microtasks" on public.microtask_progress for all using (auth.uid() = user_id);
 
 -- ════════════════════════════════════════════════════
@@ -84,6 +90,7 @@ create table if not exists public.activity_log (
 );
 create index if not exists activity_log_user_date on public.activity_log(user_id, date);
 alter table public.activity_log enable row level security;
+drop policy if exists "Users can CRUD own activity" on public.activity_log;
 create policy "Users can CRUD own activity" on public.activity_log for all using (auth.uid() = user_id);
 
 -- ════════════════════════════════════════════════════
@@ -101,6 +108,7 @@ create table if not exists public.codeforces_stats (
   last_synced timestamptz default now()
 );
 alter table public.codeforces_stats enable row level security;
+drop policy if exists "Users can CRUD own CF stats" on public.codeforces_stats;
 create policy "Users can CRUD own CF stats" on public.codeforces_stats for all using (auth.uid() = user_id);
 
 -- ════════════════════════════════════════════════════
@@ -118,6 +126,7 @@ create table if not exists public.leetcode_stats (
   last_synced timestamptz default now()
 );
 alter table public.leetcode_stats enable row level security;
+drop policy if exists "Users can CRUD own LC stats" on public.leetcode_stats;
 create policy "Users can CRUD own LC stats" on public.leetcode_stats for all using (auth.uid() = user_id);
 
 -- ════════════════════════════════════════════════════
@@ -136,6 +145,7 @@ create table if not exists public.github_stats (
   last_synced timestamptz default now()
 );
 alter table public.github_stats enable row level security;
+drop policy if exists "Users can CRUD own GH stats" on public.github_stats;
 create policy "Users can CRUD own GH stats" on public.github_stats for all using (auth.uid() = user_id);
 
 -- ════════════════════════════════════════════════════
@@ -162,3 +172,46 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ════════════════════════════════════════════════════
+-- 11. UNIFIED EXTERNAL STATS TABLE (Final Architecture)
+-- ════════════════════════════════════════════════════
+create table if not exists public.external_stats (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  cf jsonb,
+  lc jsonb,
+  gh jsonb,
+  last_synced timestamptz default now()
+);
+alter table public.external_stats enable row level security;
+drop policy if exists "Users can CRUD own external stats" on public.external_stats;
+create policy "Users can CRUD own external stats" on public.external_stats for all using (auth.uid() = user_id);
+
+-- ════════════════════════════════════════════════════
+-- 12. SKILL HISTORY TABLE (for Growth Chart)
+-- ════════════════════════════════════════════════════
+create table if not exists public.skill_history (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  date text not null,
+  skill_score integer not null,
+  created_at timestamptz default now(),
+  primary key (user_id, date)
+);
+alter table public.skill_history enable row level security;
+drop policy if exists "Users can CRUD own skill history" on public.skill_history;
+create policy "Users can CRUD own skill history" on public.skill_history for all using (auth.uid() = user_id);
+
+-- ════════════════════════════════════════════════════
+-- 13. AI ANALYTICS CACHE TABLE (Anti-Spam)
+-- ════════════════════════════════════════════════════
+create table if not exists public.ai_analytics_cache (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  weak_topics text[] default '{}',
+  strong_topics text[] default '{}',
+  daily_plan text[] default '{}',
+  suggestions jsonb default '[]',
+  updated_at timestamptz default now()
+);
+alter table public.ai_analytics_cache enable row level security;
+drop policy if exists "Users can CRUD own AI cache" on public.ai_analytics_cache;
+create policy "Users can CRUD own AI cache" on public.ai_analytics_cache for all using (auth.uid() = user_id);

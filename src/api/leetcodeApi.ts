@@ -14,7 +14,7 @@ export interface LCStats {
     lastSynced: number;
 }
 
-const PRIMARY = 'https://alfa-leetcode-api.onrender.com';
+const PRIMARY = 'https://leetcode-api-faisalshohag.vercel.app';
 const FALLBACK = 'https://leetcode-stats-api.herokuapp.com';
 
 export async function fetchLeetCodeStats(username: string): Promise<LCStats | null> {
@@ -82,33 +82,3 @@ function parseFallbackResponse(username: string, d: any): LCStats {
     };
 }
 
-// ─── Save LC stats to Supabase ────────────────────────────────────────────────
-export async function saveLCStatsToSupabase(userId: string, stats: LCStats, supabase: any): Promise<void> {
-    await supabase.from('leetcode_stats').upsert({
-        user_id: userId,
-        username: stats.username,
-        total_solved: stats.totalSolved,
-        easy_solved: stats.easySolved,
-        medium_solved: stats.mediumSolved,
-        hard_solved: stats.hardSolved,
-        ranking: stats.ranking,
-        submission_dates: stats.submissionDates,
-        last_synced: new Date().toISOString(),
-    });
-}
-
-// ─── Load LC stats from Supabase ──────────────────────────────────────────────
-export async function loadLCStats(userId: string, supabase: any): Promise<LCStats | null> {
-    const { data } = await supabase.from('leetcode_stats').select('*').eq('user_id', userId).single();
-    if (!data) return null;
-    return {
-        username: data.username,
-        totalSolved: data.total_solved,
-        easySolved: data.easy_solved,
-        mediumSolved: data.medium_solved,
-        hardSolved: data.hard_solved,
-        ranking: data.ranking,
-        submissionDates: data.submission_dates || [],
-        lastSynced: new Date(data.last_synced).getTime(),
-    };
-}

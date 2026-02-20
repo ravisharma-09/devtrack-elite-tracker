@@ -9,7 +9,7 @@ import { Mail, Calendar, Edit3, Check, LogOut, Shield, RefreshCw, Code2, Github,
 
 export const Profile: React.FC = () => {
     const { user, logout } = useAuth();
-    const { statistics, activityHistory, roadmap } = useStore();
+    const { statistics, activityHistory, roadmap, externalStats, setExternalStats } = useStore();
     const [name, setName] = useState(user?.name || 'Dev');
     const [editingName, setEditingName] = useState(false);
     const [savingName, setSavingName] = useState(false);
@@ -68,6 +68,8 @@ export const Profile: React.FC = () => {
             setSyncing(true);
             // Pass handles directly — don't re-read from Supabase (circular bug avoided)
             const result = await syncExternalStats(user.id, true, handles);
+            setExternalStats(result); // Instantly updates global store & UI
+
             if (result.cf || result.lc || result.gh) {
                 setSyncMsg(`✓ Done! Check Statistics page. ${[result.cf && 'CF', result.lc && 'LC', result.gh && 'GH'].filter(Boolean).join(', ')} synced.`);
             } else {
@@ -85,6 +87,8 @@ export const Profile: React.FC = () => {
         setSyncing(true); setSyncMsg('Syncing...');
         try {
             const result = await syncExternalStats(user.id, true);
+            setExternalStats(result); // Instantly updates global store & UI
+
             if (result.cf || result.lc || result.gh) {
                 setSyncMsg(`✓ Synced! Check Statistics page.`);
             } else {
@@ -144,7 +148,7 @@ export const Profile: React.FC = () => {
             {/* Platform Handles */}
             <div className="retro-panel p-6 border-brand-accent/20">
                 <div className="flex justify-between items-center mb-5">
-                    <h3 className="text-sm font-mono uppercase text-brand-accent tracking-widest">Platform Handles</h3>
+                    <h3 className="text-sm font-mono uppercase text-brand-accent tracking-widest">Platform Connections</h3>
                     <button onClick={forceSync} disabled={syncing}
                         className="flex items-center gap-1.5 text-xs font-mono text-brand-secondary hover:text-brand-primary transition-colors disabled:opacity-40">
                         <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
@@ -152,38 +156,57 @@ export const Profile: React.FC = () => {
                     </button>
                 </div>
 
-                <div className="space-y-4">
-                    {[
-                        { icon: <Trophy size={15} className="text-yellow-400" />, label: 'Codeforces Handle', placeholder: 'tourist', value: cfHandle, setter: setCfHandle },
-                        { icon: <Code2 size={15} className="text-orange-400" />, label: 'LeetCode Username', placeholder: 'neal_wu', value: lcUsername, setter: setLcUsername },
-                        { icon: <Github size={15} className="text-blue-400" />, label: 'GitHub Username', placeholder: 'torvalds', value: ghUsername, setter: setGhUsername },
-                    ].map(field => (
-                        <div key={field.label}>
-                            <label className="flex items-center gap-2 text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1.5">
-                                {field.icon} {field.label}
-                            </label>
-                            <input
-                                value={field.value}
-                                onChange={e => field.setter(e.target.value)}
-                                placeholder={field.placeholder}
-                                className="w-full bg-brand-bg border border-brand-border text-brand-primary font-mono text-sm px-3 py-2 rounded focus:outline-none focus:border-brand-primary/60 placeholder:text-brand-secondary/30"
-                            />
+                <div className="space-y-6">
+                    {/* Codeforces */}
+                    <div className="space-y-1">
+                        <label className="flex items-center justify-between text-xs font-mono text-brand-secondary uppercase tracking-widest">
+                            <span className="flex items-center gap-2"><Trophy size={15} className="text-yellow-400" /> Codeforces Handle</span>
+                            {externalStats?.cf && <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>}
+                        </label>
+                        <div className="flex gap-2">
+                            <input value={cfHandle} onChange={e => setCfHandle(e.target.value)} placeholder="tourist"
+                                className="flex-1 bg-brand-bg border border-brand-border text-brand-primary font-mono text-sm px-3 py-2 rounded focus:outline-none focus:border-brand-primary/60 placeholder:text-brand-secondary/30" />
+                            <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
+                                className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
                         </div>
-                    ))}
+                        {externalStats?.cf && <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">{externalStats.cf.rating} Rating • {externalStats.cf.problemsSolved} Solved</div>}
+                    </div>
 
-                    <button onClick={saveHandles} disabled={savingHandles || syncing}
-                        className="w-full mt-2 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm py-2.5 rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase tracking-widest">
-                        {savingHandles ? 'Saving & Syncing...' : 'Save Handles & Sync'}
-                    </button>
+                    {/* LeetCode */}
+                    <div className="space-y-1">
+                        <label className="flex items-center justify-between text-xs font-mono text-brand-secondary uppercase tracking-widest">
+                            <span className="flex items-center gap-2"><Code2 size={15} className="text-orange-400" /> LeetCode Username</span>
+                            {externalStats?.lc && <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>}
+                        </label>
+                        <div className="flex gap-2">
+                            <input value={lcUsername} onChange={e => setLcUsername(e.target.value)} placeholder="neal_wu"
+                                className="flex-1 bg-brand-bg border border-brand-border text-brand-primary font-mono text-sm px-3 py-2 rounded focus:outline-none focus:border-brand-primary/60 placeholder:text-brand-secondary/30" />
+                            <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
+                                className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
+                        </div>
+                        {externalStats?.lc && <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">{externalStats.lc.totalSolved} Problems Solved • Top {(100 - (externalStats.lc.ranking / 100000)).toFixed(1)}%</div>}
+                    </div>
+
+                    {/* GitHub */}
+                    <div className="space-y-1">
+                        <label className="flex items-center justify-between text-xs font-mono text-brand-secondary uppercase tracking-widest">
+                            <span className="flex items-center gap-2"><Github size={15} className="text-blue-400" /> GitHub Username</span>
+                            {externalStats?.gh && <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>}
+                        </label>
+                        <div className="flex gap-2">
+                            <input value={ghUsername} onChange={e => setGhUsername(e.target.value)} placeholder="torvalds"
+                                className="flex-1 bg-brand-bg border border-brand-border text-brand-primary font-mono text-sm px-3 py-2 rounded focus:outline-none focus:border-brand-primary/60 placeholder:text-brand-secondary/30" />
+                            <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
+                                className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
+                        </div>
+                        {externalStats?.gh && <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">{externalStats.gh.publicRepos} Repositories • {externalStats.gh.lastMonthCommits} Commits (30d)</div>}
+                    </div>
 
                     {syncMsg && (
-                        <div className={`text-xs font-mono mt-2 ${syncMsg.startsWith('✓') ? 'text-brand-primary' : 'text-brand-accent'}`}>
+                        <div className={`text-xs font-mono mt-4 pt-3 border-t border-brand-border ${syncMsg.includes('✓') || syncMsg.includes('Saved') ? 'text-brand-primary' : 'text-brand-accent'}`}>
                             {syncMsg}
                         </div>
                     )}
-                    <p className="text-xs font-mono text-brand-secondary/50 mt-1">
-                        Stats auto-refresh every 24h. Use "Refresh Stats" for manual update.
-                    </p>
                 </div>
             </div>
 
