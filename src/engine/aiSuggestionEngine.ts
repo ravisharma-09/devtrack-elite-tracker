@@ -1,6 +1,9 @@
 import type { RoadmapCategory, StudySession, ActivityHistory } from '../types';
 import type { AIRecommendation } from './learningStore';
 import { calculateConsistencyScore, calculateStreak } from './consistencyEngine';
+import type { CFStats } from '../api/codeforcesApi';
+import type { LCStats } from '../api/leetcodeApi';
+import type { GHStats } from '../api/githubApi';
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -126,12 +129,26 @@ export function extractLearningAnalytics(
     };
 }
 
-// ─── Build Rich Groq Prompt ───────────────────────────────────────────────────
-function buildPrompt(analytics: LearningAnalytics, sessions: StudySession[]): string {
+// ─── Build Rich Groq Prompt (with optional external stats) ───────────────────
+function buildPrompt(
+    analytics: LearningAnalytics,
+    sessions: StudySession[],
+    cf?: CFStats | null,
+    lc?: LCStats | null,
+    gh?: GHStats | null
+): string {
     const completionPct = analytics.totalTopics > 0
         ? Math.round((analytics.completedTopics / analytics.totalTopics) * 100) : 0;
     const microTaskPct = analytics.totalMicroTasks > 0
         ? Math.round((analytics.completedMicroTasks / analytics.totalMicroTasks) * 100) : 0;
+
+    const externalBlock = (cf || lc || gh) ? `
+## EXTERNAL PLATFORM STATS
+${cf?.rating ? `- Codeforces Rating: ${cf.rating} (max: ${cf.maxRating}, rank: ${cf.rank})
+- Codeforces Problems Solved: ${cf.problemsSolved}` : '- Codeforces: not connected'}
+${lc?.totalSolved ? `- LeetCode Total Solved: ${lc.totalSolved} (Easy: ${lc.easySolved}, Medium: ${lc.mediumSolved}, Hard: ${lc.hardSolved})` : '- LeetCode: not connected'}
+${gh?.lastMonthCommits ? `- GitHub Commits (last 30d): ${gh.lastMonthCommits} across ${gh.publicRepos} repos
+- Top Languages: ${gh.topLanguages.slice(0, 3).join(', ')}` : '- GitHub: not connected'}` : '';
 
     return `You are an elite SDE coaching AI for a developer. Analyze this learning profile and provide a precision recommendation.
 
@@ -152,7 +169,7 @@ function buildPrompt(analytics: LearningAnalytics, sessions: StudySession[]): st
 ## NEXT UNLOCKED
 - Topic: ${analytics.nextUnlockedTopic || 'All complete!'}
 - Micro-task: ${analytics.nextUnlockedMicroTask || 'None'}
-
+${externalBlock}
 ## RECENT SESSIONS (last 5)
 ${sessions.slice(-5).map(s => `- ${s.topic} | ${s.durationMinutes}min | ${s.difficulty}`).join('\n') || '- None yet'}
 
@@ -161,7 +178,8 @@ Based on this deep analysis, provide ONE precise recommendation. Consider:
 2. If velocity is declining → recommend motivation boost with an achievable win
 3. If consistency is low (<40%) → recommend building habit with short daily sessions
 4. If accelerating → push to harder challenges
-5. Always prefer the next sequential micro-task if one exists
+5. If CF rating < 1200 and LeetCode Hard < 5 → focus on fundamentals first
+6. Always prefer the next sequential micro-task if one exists
 
 Respond ONLY with valid JSON, nothing else:
 {
@@ -228,18 +246,20 @@ function deterministicRecommendation(analytics: LearningAnalytics): AIRecommenda
     return { topic, reason, estimatedTime: '30-60 mins', urgency, coachingNote, cachedAt: Date.now() };
 }
 
-// ─── Main Export ──────────────────────────────────────────────────────────────
+// ─── Main Export (standard) ───────────────────────────────────────────────────
 export async function getAIRecommendation(
     roadmap: RoadmapCategory[],
     sessions: StudySession[],
     activityHistory: ActivityHistory,
-    cached: AIRecommendation | null
+    cached: AIRecommendation | null,
+    cf?: CFStats | null,
+    lc?: LCStats | null,
+    gh?: GHStats | null
 ): Promise<AIRecommendation> {
-    // Return valid cache
     if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) return cached;
 
     const analytics = extractLearningAnalytics(roadmap, sessions, activityHistory);
-    const prompt = buildPrompt(analytics, sessions);
+    const prompt = buildPrompt(analytics, sessions, cf, lc, gh);
     const groqResult = await callGroqAPI(prompt);
 
     if (groqResult?.topic) {

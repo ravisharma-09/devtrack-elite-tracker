@@ -1,18 +1,38 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '../auth/AuthContext';
 import { useStore } from '../engine/learningStore';
 import { calculatePlayerLevel } from '../data/statisticsData';
 import { calculateConsistencyScore, calculateStreak } from '../engine/consistencyEngine';
 import { extractLearningAnalytics } from '../engine/aiSuggestionEngine';
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
-import { Trophy, Flame, Target, BookOpen, Clock, BarChart2, TrendingUp, TrendingDown, Minus, Award, Zap } from 'lucide-react';
+import { loadExternalStats, syncExternalStats } from '../engine/externalSyncEngine';
+import { computeSkillProfile } from '../engine/analyticsEngine';
+import type { ExternalStats } from '../engine/externalSyncEngine';
+import { Trophy, Flame, Target, BookOpen, Clock, BarChart2, TrendingUp, TrendingDown, Minus, Award, Zap, Code2, Github, RefreshCw } from 'lucide-react';
 
 export const Statistics: React.FC = () => {
+    const { user } = useAuth();
     const { roadmap, studySessions, activityHistory, statistics } = useStore();
+    const [ext, setExt] = useState<ExternalStats>({ cf: null, lc: null, gh: null, lastSynced: null });
+    const [syncing, setSyncing] = useState(false);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        loadExternalStats(user.id).then(setExt).catch(() => { });
+    }, [user?.id]);
+
+    const refreshExternal = async () => {
+        if (!user?.id || syncing) return;
+        setSyncing(true);
+        try { const fresh = await syncExternalStats(user.id, true); setExt(fresh); } catch { }
+        finally { setSyncing(false); }
+    };
 
     // ── Compute advanced analytics ────────────────────────────────────────────
     const analytics = extractLearningAnalytics(roadmap, studySessions, activityHistory);
     const liveStreak = calculateStreak(activityHistory);
     const consistencyScore = calculateConsistencyScore(activityHistory);
+    const skill = computeSkillProfile(roadmap, studySessions, activityHistory, ext.cf, ext.lc, ext.gh);
 
     const roadmapPct = analytics.totalTopics > 0
         ? Math.round((analytics.completedTopics / analytics.totalTopics) * 100) : 0;
@@ -57,10 +77,98 @@ export const Statistics: React.FC = () => {
 
     return (
         <div className="space-y-8 animate-fade-in pb-12">
-            <header className="mb-8 border-b border-brand-border pb-4">
-                <h2 className="text-2xl font-bold retro-text tracking-widest uppercase mb-2">Advanced Metrics</h2>
-                <p className="retro-text-sub">Deep learning telemetry — all values computed live from execution data</p>
+            <header className="mb-8 border-b border-brand-border pb-4 flex justify-between items-end">
+                <div>
+                    <h2 className="text-2xl font-bold retro-text tracking-widest uppercase mb-2">Advanced Metrics</h2>
+                    <p className="retro-text-sub">Deep learning telemetry — all values computed live from execution data</p>
+                </div>
+                {ext.lastSynced && (
+                    <button onClick={refreshExternal} disabled={syncing}
+                        className="flex items-center gap-1.5 text-xs font-mono text-brand-secondary hover:text-brand-primary transition-colors disabled:opacity-40">
+                        <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+                        {syncing ? 'Syncing...' : `Platforms synced ${Math.round((Date.now() - ext.lastSynced) / 60000)}m ago`}
+                    </button>
+                )}
             </header>
+
+            {/* ── SKILL SCORE CARDS ────────────────────────────────────────── */}
+            {(ext.cf || ext.lc || ext.gh) && (
+                <div className="space-y-4">
+                    <h3 className="text-xs font-mono uppercase text-brand-secondary tracking-widest">Platform Skill Profile</h3>
+
+                    {/* Platform stats row */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {ext.cf && (
+                            <div className="retro-panel p-4 border-yellow-400/20">
+                                <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1 flex items-center gap-1">
+                                    <Trophy size={11} className="text-yellow-400" /> Codeforces
+                                </div>
+                                <div className="text-2xl font-bold font-mono text-yellow-400">{ext.cf.rating || '—'}</div>
+                                <div className="text-xs font-mono text-brand-secondary mt-0.5">{ext.cf.rank} · max {ext.cf.maxRating}</div>
+                                <div className="text-xs font-mono text-brand-secondary">{ext.cf.problemsSolved} solved</div>
+                            </div>
+                        )}
+                        {ext.lc && (
+                            <div className="retro-panel p-4 border-orange-400/20">
+                                <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1 flex items-center gap-1">
+                                    <Code2 size={11} className="text-orange-400" /> LeetCode
+                                </div>
+                                <div className="text-2xl font-bold font-mono text-orange-400">{ext.lc.totalSolved}</div>
+                                <div className="text-xs font-mono text-brand-secondary mt-0.5">
+                                    E:{ext.lc.easySolved} M:{ext.lc.mediumSolved} H:{ext.lc.hardSolved}
+                                </div>
+                            </div>
+                        )}
+                        {ext.gh && (
+                            <div className="retro-panel p-4 border-blue-400/20">
+                                <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1 flex items-center gap-1">
+                                    <Github size={11} className="text-blue-400" /> GitHub
+                                </div>
+                                <div className="text-2xl font-bold font-mono text-blue-400">{ext.gh.lastMonthCommits}</div>
+                                <div className="text-xs font-mono text-brand-secondary mt-0.5">commits last 30d</div>
+                                <div className="text-xs font-mono text-brand-secondary">{ext.gh.publicRepos} repos · {ext.gh.totalStars}★</div>
+                            </div>
+                        )}
+                        {/* Overall skill score */}
+                        <div className="retro-panel p-4 border-brand-primary/30">
+                            <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1 flex items-center gap-1">
+                                <Zap size={11} className="text-brand-primary" /> Skill Score
+                            </div>
+                            <div className="text-2xl font-bold font-mono text-brand-primary">{skill.overallScore}</div>
+                            <div className="text-xs font-mono text-brand-secondary mt-0.5">/100 overall</div>
+                        </div>
+                    </div>
+
+                    {/* Score breakdown bars */}
+                    <div className="retro-panel p-5 border-brand-primary/10">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {[
+                                { label: 'DSA Score', value: skill.dsaScore, color: 'bg-yellow-400' },
+                                { label: 'Dev Score', value: skill.developmentScore, color: 'bg-blue-400' },
+                                { label: 'Consistency', value: skill.consistencyScore, color: 'bg-brand-primary' },
+                            ].map(s => (
+                                <div key={s.label}>
+                                    <div className="flex justify-between text-xs font-mono text-brand-secondary mb-1.5">
+                                        <span className="uppercase tracking-widest">{s.label}</span>
+                                        <span className="text-brand-primary font-bold">{s.value}/100</span>
+                                    </div>
+                                    <div className="h-1.5 bg-brand-bg rounded-full overflow-hidden">
+                                        <div className={`h-full ${s.color} rounded-full transition-all duration-700`} style={{ width: `${s.value}%` }} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {!ext.cf && !ext.lc && !ext.gh && (
+                <div className="retro-panel p-5 border-brand-border/20 text-center">
+                    <p className="text-brand-secondary font-mono text-sm">
+                        Add your Codeforces, LeetCode, and GitHub handles in <span className="text-brand-primary">Profile → Platform Handles</span> to unlock full skill analytics.
+                    </p>
+                </div>
+            )}
 
             {/* ── LEVEL BANNER ──────────────────────────────────────────────── */}
             <div className="retro-panel p-6 border-yellow-400/40 bg-brand-bg/50 shadow-[0_0_20px_rgba(250,204,21,0.06)] relative overflow-hidden">

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { signIn, signUp, signOut, onAuthStateChange } from './authService';
 import { isSupabaseConfigured } from '../backend/supabaseClient';
 import { loadAndHydrate } from '../engine/syncEngine';
+import { syncIfStale } from '../engine/externalSyncEngine';
 
 interface AuthUser {
     id: string;
@@ -41,8 +42,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // ── Hydrate Supabase data into localStorage for a given user ──────────────
     const hydrateUser = useCallback(async (authUser: AuthUser) => {
         setIsDataReady(false);
-        await loadAndHydrate(authUser.id); // Fetches all tables → writes to localStorage
+        await loadAndHydrate(authUser.id);
         setIsDataReady(true);
+        // Background: fetch fresh external platform stats if stale (non-blocking)
+        syncIfStale(authUser.id);
     }, []);
 
     // ── Session restore on app load (persists across refresh) ─────────────────
