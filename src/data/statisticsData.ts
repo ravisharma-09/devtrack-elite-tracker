@@ -3,6 +3,7 @@ import type { Statistics } from '../types';
 export const initialStatistics: Statistics = {
     totalProblemsSolved: 0,
     totalRoadmapTopicsCompleted: 0,
+    totalMicroTasksCompleted: 0,
     studyStreakDays: 0,
     weeklyCompletionPercentage: 0,
     totalStudySessions: 0,

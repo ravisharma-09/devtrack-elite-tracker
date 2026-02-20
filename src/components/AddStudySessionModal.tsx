@@ -4,13 +4,15 @@ import { X } from 'lucide-react';
 
 interface AddStudySessionModalProps {
     onClose: () => void;
-    onSave: (session: Omit<StudySession, 'id' | 'date'>) => void;
+    onSave: (session: Omit<StudySession, 'id' | 'date' | 'timestamp'>) => void;
 }
 
 export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onClose, onSave }) => {
     const [topic, setTopic] = useState('');
     const [category, setCategory] = useState<StudySession['category']>('DSA');
     const [durationStr, setDurationStr] = useState('');
+    const [difficulty, setDifficulty] = useState<StudySession['difficulty']>('Medium');
+    const [notes, setNotes] = useState('');
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
@@ -22,6 +24,8 @@ export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onCl
             topic,
             category,
             durationMinutes,
+            difficulty,
+            notes
         });
         onClose();
     };
@@ -77,6 +81,29 @@ export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onCl
                             onChange={(e) => setDurationStr(e.target.value)}
                             placeholder="e.g. 60"
                             className="w-full bg-brand-bg border border-brand-border/50 text-brand-primary p-2 rounded focus:outline-none focus:border-brand-accent font-mono"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-mono text-brand-secondary mb-1 uppercase tracking-widest">Difficulty</label>
+                        <select
+                            value={difficulty}
+                            onChange={(e) => setDifficulty(e.target.value as StudySession['difficulty'])}
+                            className="w-full bg-brand-bg border border-brand-border/50 text-brand-primary p-2 rounded focus:outline-none focus:border-brand-accent font-mono appearance-none"
+                        >
+                            <option value="Easy">Easy</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Hard">Hard</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-mono text-brand-secondary mb-1 uppercase tracking-widest">Notes (Optional)</label>
+                        <textarea
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="e.g. Struggled with BFS queue state..."
+                            className="w-full bg-brand-bg border border-brand-border/50 text-brand-primary p-2 rounded focus:outline-none focus:border-brand-accent font-mono h-24 resize-none"
                         />
                     </div>
 

@@ -10,6 +10,12 @@ export interface DailyTimetable {
     tasks: TimetableTask[];
 }
 
+export interface MicroTask {
+    id: string;
+    title: string;
+    completed: boolean;
+}
+
 export interface RoadmapTopic {
     id: string;
     title: string;
@@ -18,6 +24,7 @@ export interface RoadmapTopic {
     estimatedTime?: string;
     completed: boolean;
     unlocked: boolean;
+    tasks?: MicroTask[];
 }
 
 export interface RoadmapCategory {
@@ -29,6 +36,7 @@ export interface RoadmapCategory {
 export interface Statistics {
     totalProblemsSolved: number;
     totalRoadmapTopicsCompleted: number;
+    totalMicroTasksCompleted: number;
     studyStreakDays: number;
     weeklyCompletionPercentage: number;
     totalStudySessions: number;
@@ -50,8 +58,19 @@ export interface ActivityHistory {
 
 export interface StudySession {
     id: string;
-    topic: string;
+    topic: string; // The roadmap string name or arbitrary study title
     category: 'DSA' | 'Web Dev' | 'CS Fundamentals' | 'Project' | 'Other';
     durationMinutes: number;
-    date: string;
+    difficulty: 'Easy' | 'Medium' | 'Hard';
+    date: string; // YYYY-MM-DD
+    timestamp: number; // Unix for precise sorting
+    notes?: string;
+}
+
+export interface LearningProfile {
+    totalStudyTime: number; // in minutes
+    strongestTopics: string[];
+    weakestTopics: string[];
+    consistencyScore: number; // 0-100 derived from activity array
+    learningLevel: PlayerLevel;
 }
