@@ -5,6 +5,15 @@ import type { RoadmapCategory, StudySession, ActivityHistory, Statistics, MicroT
 import { logSessionToHistory, getTodayDateString } from './consistencyEngine';
 import { applySessionToRoadmap } from './progressEngine';
 import { syncSession, syncMicroTask, syncRoadmapTopic, syncActivityLog } from './syncEngine';
+import { useAuth } from '../auth/AuthContext';
+
+// ─── Auto-wired hook — use this in all pages ──────────────────────────────────
+// Automatically picks up the logged-in user's ID from AuthContext so every page
+// reads/writes the correct user's Supabase-backed data without passing userId.
+export function useStore() {
+    const { user } = useAuth();
+    return useLearningStore(user?.id || 'local');
+}
 
 // ─── V3 Storage Keys (user-scoped) ───────────────────────────────────────────
 function getKeys(userId: string) {

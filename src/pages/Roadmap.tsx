@@ -1,5 +1,5 @@
 import React from 'react';
-import { useLearningStore } from '../engine/learningStore';
+import { useStore } from '../engine/learningStore';
 import type { RoadmapCategory } from '../types';
 import { CheckSquare, Square, Plus, Minus, Lock } from 'lucide-react';
 
@@ -10,7 +10,7 @@ export const Roadmap: React.FC = () => {
         updateTopicProgress,
         setRoadmap,
         setStatistics,
-    } = useLearningStore();
+    } = useStore();
 
     // Toggle a whole topic (non-microtask topics only)
     const toggleTopic = (categoryId: string, topicId: string) => {

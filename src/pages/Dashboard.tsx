@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { initialTimetable } from '../data/timetableData';
-import { useLearningStore } from '../engine/learningStore';
+import { useStore } from '../engine/learningStore';
 import { AddStudySessionModal } from '../components/AddStudySessionModal';
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
 import { getAIRecommendation } from '../engine/aiSuggestionEngine';
@@ -15,7 +15,7 @@ export const Dashboard: React.FC = () => {
     const {
         roadmap, studySessions, activityHistory, statistics,
         aiRecommendation, storeAIRecommendation, addStudySession,
-    } = useLearningStore();
+    } = useStore();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isLoadingAI, setIsLoadingAI] = useState(false);

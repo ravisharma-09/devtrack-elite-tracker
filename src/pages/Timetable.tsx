@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { initialTimetable } from '../data/timetableData';
-import { useLearningStore } from '../engine/learningStore';
+import { useStore } from '../engine/learningStore';
+import { useAuth } from '../auth/AuthContext';
 import { AddStudySessionModal } from '../components/AddStudySessionModal';
 import type { DailyTimetable } from '../types';
 import { CheckSquare, Square, Clock, PlusCircle, BookOpen } from 'lucide-react';
 import { getTodayDateString } from '../engine/consistencyEngine';
 
 export const Timetable: React.FC = () => {
-    const [timetable, setTimetable] = useLocalStorage<DailyTimetable[]>('devtrack_timetable', initialTimetable);
-    const { addStudySession, studySessions, setStatistics } = useLearningStore();
+    const { user } = useAuth();
+    const uid = user?.id || 'local';
+    // Weekly schedule is personal planning — kept in localStorage, user-scoped
+    const [timetable, setTimetable] = useLocalStorage<DailyTimetable[]>(`devtrack_timetable_${uid}`, initialTimetable);
+    const { addStudySession, studySessions, setStatistics } = useStore();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const today = getTodayDateString();

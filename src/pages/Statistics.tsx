@@ -1,5 +1,5 @@
 import React from 'react';
-import { useLearningStore } from '../engine/learningStore';
+import { useStore } from '../engine/learningStore';
 import { calculatePlayerLevel } from '../data/statisticsData';
 import { calculateConsistencyScore, calculateStreak } from '../engine/consistencyEngine';
 import { extractLearningAnalytics } from '../engine/aiSuggestionEngine';
@@ -7,7 +7,7 @@ import { ConsistencyGraph } from '../components/ConsistencyGraph';
 import { Trophy, Flame, Target, BookOpen, Clock, BarChart2, TrendingUp, TrendingDown, Minus, Award, Zap } from 'lucide-react';
 
 export const Statistics: React.FC = () => {
-    const { roadmap, studySessions, activityHistory, statistics } = useLearningStore();
+    const { roadmap, studySessions, activityHistory, statistics } = useStore();
 
     // ── Compute advanced analytics ────────────────────────────────────────────
     const analytics = extractLearningAnalytics(roadmap, studySessions, activityHistory);

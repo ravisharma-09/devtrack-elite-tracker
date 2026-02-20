@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { useLearningStore } from '../engine/learningStore';
+import { useStore } from '../engine/learningStore';
 import { getUserProfile, updateUserName } from '../auth/authService';
 import { calculatePlayerLevel } from '../data/statisticsData';
 import { calculateConsistencyScore } from '../engine/consistencyEngine';
@@ -8,7 +8,7 @@ import { Mail, Calendar, Edit3, Check, LogOut, Shield } from 'lucide-react';
 
 export const Profile: React.FC = () => {
     const { user, logout } = useAuth();
-    const { statistics, activityHistory, roadmap } = useLearningStore();
+    const { statistics, activityHistory, roadmap } = useStore();
     const [name, setName] = useState(user?.name || 'Dev');
     const [editingName, setEditingName] = useState(false);
     const [savingName, setSavingName] = useState(false);
