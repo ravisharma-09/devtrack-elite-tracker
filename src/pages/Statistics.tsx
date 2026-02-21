@@ -7,9 +7,9 @@ import { extractLearningAnalytics } from '../engine/aiSuggestionEngine';
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
 import { syncExternalStats } from '../engine/externalSyncEngine';
 import { computeSkillProfile } from '../engine/analyticsEngine';
-import { Trophy, Flame, Target, BookOpen, Clock, BarChart2, TrendingUp, TrendingDown, Minus, Award, Zap, Code2, Github, RefreshCw, Crosshair, BrainCircuit } from 'lucide-react';
+import { Trophy, Flame, Target, BookOpen, Clock, TrendingUp, TrendingDown, Minus, Zap, RefreshCw, Crosshair, BrainCircuit } from 'lucide-react';
 import {
-    Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
+    Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer,
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, AreaChart, Area
 } from 'recharts';
 
@@ -43,11 +43,7 @@ export const Statistics: React.FC = () => {
     const level = calculatePlayerLevel(roadmapPct);
     const formatHours = (m: number) => m >= 60 ? `${(m / 60).toFixed(1)}h` : `${m}m`;
 
-    const categoryStats = roadmap.map(cat => {
-        const completed = cat.topics.filter(t => t.completed).length;
-        const total = cat.topics.length;
-        return { id: cat.id, title: cat.title, completed, total };
-    });
+
 
     const VelocityIcon = analytics.velocityTrend === 'accelerating' ? TrendingUp
         : analytics.velocityTrend === 'declining' ? TrendingDown : Minus;
