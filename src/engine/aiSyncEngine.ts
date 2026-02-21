@@ -49,7 +49,12 @@ export async function syncAIAnalytics(
                             dailyPlan: data.daily_plan || [],
                             motivationalInsight: data.suggestions?.motivationalInsight || "Keep going!"
                         },
-                        questions: data.suggestions?.questions || null,
+                        questions: data.suggestions?.questions ? {
+                            topic: data.suggestions.questions.topic || "Arrays",
+                            description: data.suggestions.questions.description || "",
+                            questions: data.suggestions.questions.questions || [],
+                            projects: data.suggestions.questions.projects || []
+                        } : null,
                         lastUpdated: dbTime
                     };
                     return payload;
