@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useStore } from '../engine/learningStore';
 import { calculatePlayerLevel } from '../data/statisticsData';
@@ -10,7 +10,7 @@ import { computeSkillProfile } from '../engine/analyticsEngine';
 import { Trophy, Flame, Target, BookOpen, Clock, BarChart2, TrendingUp, TrendingDown, Minus, Award, Zap, Code2, Github, RefreshCw, Crosshair, BrainCircuit } from 'lucide-react';
 import {
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, LineChart, Line, AreaChart, Area
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, AreaChart, Area
 } from 'recharts';
 
 export const Statistics: React.FC = () => {
