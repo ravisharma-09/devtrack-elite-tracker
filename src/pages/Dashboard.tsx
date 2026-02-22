@@ -42,20 +42,20 @@ export const Dashboard: React.FC = () => {
                 setProfile(profileData);
             }
 
-            // Fetch Recent Activities
-            const { data: actData } = await supabase
-                .from('activities')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
-                .limit(5);
+            // Fetch Recent Internal/External Activities
+            const [intRes, extRes] = await Promise.all([
+                supabase.from('activities').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
+                supabase.from('external_activity').select('*').eq('user_id', user.id).order('activity_timestamp', { ascending: false }).limit(5)
+            ]);
 
-            if (mounted && actData) {
-                setRecentActivities(actData);
+            if (mounted && extRes.data) {
+                setRecentActivities(extRes.data);
+            }
 
+            if (mounted && intRes.data) {
                 // Calculate today's manual study minutes
                 const today = new Date().toISOString().split('T')[0];
-                const todayMins = actData
+                const todayMins = intRes.data
                     .filter((a: any) => a.type === 'study' && a.created_at.startsWith(today))
                     .reduce((acc: any, curr: any) => acc + (curr.score || 0), 0);
                 setTodayStudyMinutes(todayMins);
@@ -67,8 +67,8 @@ export const Dashboard: React.FC = () => {
                     setIsLoadingAI(true);
                     const { syncAIAnalytics } = await import('../engine/aiSyncEngine');
 
-                    // Transform actData to StudySession interface type implicitly mapped
-                    const mappedSessions = actData?.filter((a: any) => a.type === 'study').map((a: any) => ({
+                    // Transform intRes.data to StudySession interface type implicitly mapped
+                    const mappedSessions = intRes.data?.filter((a: any) => a.type === 'study').map((a: any) => ({
                         id: a.id, topic: a.topic || 'General', category: a.source || 'devtrack', durationMinutes: a.score || 30, date: a.created_at, timestamp: new Date(a.created_at).getTime(), difficulty: a.difficulty || 'Medium'
                     })) || [];
 
@@ -90,6 +90,9 @@ export const Dashboard: React.FC = () => {
             if (!supabase) return;
             const sub = supabase.channel('dashboard_changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, () => {
+                    fetchData();
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'external_activity', filter: `user_id=eq.${user.id}` }, () => {
                     fetchData();
                 })
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'activities', filter: `user_id=eq.${user.id}` }, () => {
@@ -238,15 +241,14 @@ export const Dashboard: React.FC = () => {
                         {recentActivities.map(act => (
                             <div key={act.id} className="flex justify-between items-center bg-brand-bg/50 border border-brand-border/30 p-3 rounded">
                                 <div className="flex items-center gap-3">
-                                    <span className={`w-2 h-2 rounded-full ${act.source === 'leetcode' ? 'bg-orange-500' : act.source === 'codeforces' ? 'bg-cyan-500' : 'bg-brand-secondary'}`} />
-                                    <span className="text-xs font-mono text-brand-primary">
-                                        {act.type === 'solve' && `Solved ${act.metadata?.title || 'a problem'}`}
-                                        {act.type === 'commit' && `Committed to ${act.metadata?.repo || 'a repository'}`}
-                                        {act.type === 'study' && `Studied ${act.metadata?.topic || 'a topic'}`}
-                                        {act.type === 'contest' && `Participated in contest`}
+                                    <span className={`w-2 h-2 rounded-full ${act.platform === 'LeetCode' ? 'bg-orange-500' : act.platform === 'Codeforces' ? 'bg-cyan-500' : 'bg-brand-secondary'}`} />
+                                    <span className="text-xs font-mono text-brand-primary line-clamp-1">
+                                        {act.activity_title}
                                     </span>
                                 </div>
-                                <span className="text-[10px] font-mono text-brand-secondary">{new Date(act.created_at).toLocaleDateString()}</span>
+                                <span className="text-[10px] whitespace-nowrap font-mono text-brand-secondary">
+                                    {new Date(act.activity_timestamp).toLocaleDateString()}
+                                </span>
                             </div>
                         ))}
                     </div>
