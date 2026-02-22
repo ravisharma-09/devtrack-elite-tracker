@@ -26,7 +26,8 @@ export async function syncEngine(userIdParam: string) {
         // 1. SYNC CODEFORCES
         if (profile.cf_handle) {
             try {
-                const res = await fetch(`https://codeforces.com/api/user.status?handle=${profile.cf_handle}`);
+                const url = 'https://codeforces.com/api/user.status?handle=' + profile.cf_handle;
+                const res = await fetch(url);
                 const data = await res.json();
 
                 if (data.status === 'OK' && data.result) {
