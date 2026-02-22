@@ -5,8 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "api": "node server/index.js",
-    "dev:full": "echo 'Run these in TWO terminals: npm run api  &&  npm run dev'",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
