@@ -1,134 +1,61 @@
 import React, { useEffect, useState } from 'react';
-import { Brain, Zap, Terminal, LayoutTemplate, Github, FolderGit2, MessageSquareText, ExternalLink, CheckCircle, RefreshCw, Code2, Trophy } from 'lucide-react';
+import { Brain, Zap, Terminal, LayoutTemplate, Github, ExternalLink, RefreshCw, Code2, Trophy, TrendingUp, BookOpen, ChevronRight, AlertCircle, CheckCircle, Target } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
-import problemBank from '../data/problemBank.json';
-import { fetchCodeforcesStats } from '../api/codeforcesApi';
+import { runDSASuggestionEngine, type DSASuggestionResult, type DSAProblem } from '../core/dsaSuggestionEngine';
 
 type TabType = 'dsa' | 'opensource' | 'webdev';
 
-// ── Open Source recs ─────────────────────────────────────────────────────────
+// ── Open Source (state-based) ─────────────────────────────────────────────────
 const OS_BEGINNER = [
     { name: 'First Contributions', description: 'Make your very first open-source PR. Step-by-step guide for beginners.', link: 'https://github.com/firstcontributions/first-contributions', topic: 'Git & GitHub', difficulty: 'Easy' },
-    { name: 'Hacktoberfest', description: 'October event — 4 PRs = shirt + badge. Best starting point for real open-source.', link: 'https://hacktoberfest.com', topic: 'Open Source', difficulty: 'Easy' },
+    { name: 'Hacktoberfest', description: "October event — 4 PRs = shirt + badge. Best starting point for open-source.", link: 'https://hacktoberfest.com', topic: 'Open Source', difficulty: 'Easy' },
     { name: 'Good First Issues', description: 'Browse beginner-friendly labeled issues across thousands of repos.', link: 'https://goodfirstissues.com', topic: 'Open Source', difficulty: 'Easy' },
-    { name: 'GSSoC (GirlScript)', description: "India's largest open source program. Perfect for students. Apply in Feb-Mar.", link: 'https://gssoc.girlscript.tech', topic: 'Mentored', difficulty: 'Easy' },
+    { name: 'GSSoC (GirlScript)', description: "India's largest open source program. Perfect for students. Apply Feb-Mar.", link: 'https://gssoc.girlscript.tech', topic: 'Mentored', difficulty: 'Easy' },
     { name: 'KWoC (IIT-KGP)', description: 'Winter open source event by IIT Kharagpur. Earn certificate + experience.', link: 'https://kwoc.kossiitkgp.org', topic: 'Mentored', difficulty: 'Easy' },
 ];
 const OS_INTERMEDIATE = [
     { name: 'GSoC (Google)', description: 'Prestigious 3-month program. $1500–$6600 stipend. Apply Feb–Mar each year.', link: 'https://summerofcode.withgoogle.com', topic: 'GSoC', difficulty: 'Hard' },
-    { name: 'LFX Mentorship', description: 'Linux Foundation paid mentorship with Kubernetes, CNCF projects. Apply rolling.', link: 'https://mentorship.lfx.linuxfoundation.org', topic: 'Cloud Native', difficulty: 'Medium' },
+    { name: 'LFX Mentorship', description: 'Linux Foundation paid mentorship with Kubernetes, CNCF projects.', link: 'https://mentorship.lfx.linuxfoundation.org', topic: 'Cloud Native', difficulty: 'Medium' },
     { name: 'Outreachy', description: 'Paid remote internships for underrepresented contributors. $7000 stipend.', link: 'https://www.outreachy.org', topic: 'Paid', difficulty: 'Medium' },
 ];
 
-// ── Web Project recs ──────────────────────────────────────────────────────────
 const WEB_BEGINNER = [
-    { name: 'Portfolio Website', description: 'Build your personal portfolio — the #1 thing recruiters check. HTML + CSS + JS.', link: 'https://github.com/topics/portfolio', topic: 'HTML/CSS', difficulty: 'Easy' },
+    { name: 'Portfolio Website', description: 'Build your personal portfolio — #1 thing recruiters check.', link: 'https://github.com/topics/portfolio', topic: 'HTML/CSS', difficulty: 'Easy' },
     { name: 'Todo App', description: 'Master DOM manipulation. Add, delete, complete tasks with localStorage.', link: 'https://github.com/topics/todo-app', topic: 'DOM', difficulty: 'Easy' },
-    { name: 'Weather App', description: 'Learn Fetch API by building a city weather dashboard with OpenWeather API.', link: 'https://openweathermap.org/api', topic: 'APIs', difficulty: 'Medium' },
+    { name: 'Weather App', description: 'Learn Fetch API by building a city weather dashboard.', link: 'https://openweathermap.org/api', topic: 'APIs', difficulty: 'Medium' },
 ];
-const WEB_REACT = [
+const WEB_ADVANCED = [
     { name: 'Blog App with React', description: 'Full blog with routing, state, and CRUD. Best React practice project.', link: 'https://github.com/topics/react-blog', topic: 'React', difficulty: 'Medium' },
-    { name: 'E-Commerce Cart', description: 'Product listing, cart management, filtering. Hooks + Context API.', link: 'https://github.com/topics/react-ecommerce', topic: 'React', difficulty: 'Hard' },
-    { name: 'Real-time Chat App', description: 'WebSockets, Firebase/Supabase. Build a working chat with rooms.', link: 'https://github.com/topics/chat-app', topic: 'Full Stack', difficulty: 'Hard' },
-];
-const WEB_BACKEND = [
-    { name: 'REST API (Node.js)', description: 'Build a full CRUD REST API with Express + MongoDB or PostgreSQL.', link: 'https://github.com/topics/rest-api', topic: 'Node.js', difficulty: 'Medium' },
-    { name: 'Auth System', description: 'JWT + bcrypt authentication system. Refresh tokens, protected routes.', link: 'https://github.com/topics/jwt-authentication', topic: 'Backend', difficulty: 'Hard' },
-    { name: 'URL Shortener', description: 'Redis caching, database, redirect service. Classic backend project.', link: 'https://github.com/topics/url-shortener', topic: 'Backend', difficulty: 'Medium' },
+    { name: 'REST API (Node.js)', description: 'Full CRUD REST API with Express + PostgreSQL.', link: 'https://github.com/topics/rest-api', topic: 'Node.js', difficulty: 'Medium' },
+    { name: 'Auth System', description: 'JWT + bcrypt authentication. Refresh tokens, protected routes.', link: 'https://github.com/topics/jwt-authentication', topic: 'Backend', difficulty: 'Hard' },
 ];
 
-// ── LeetCode topic recs ───────────────────────────────────────────────────────
-const LC_TOPICS: Record<string, { easy: any; medium: any }> = {
-    arrays: {
-        easy: { name: 'Two Sum', link: 'https://leetcode.com/problems/two-sum/', difficulty: 'Easy', topic: 'Arrays' },
-        medium: { name: '3Sum', link: 'https://leetcode.com/problems/3sum/', difficulty: 'Medium', topic: 'Arrays' },
-    },
-    strings: {
-        easy: { name: 'Valid Anagram', link: 'https://leetcode.com/problems/valid-anagram/', difficulty: 'Easy', topic: 'Strings' },
-        medium: { name: 'Longest Substring Without Repeating Characters', link: 'https://leetcode.com/problems/longest-substring-without-repeating-characters/', difficulty: 'Medium', topic: 'Strings' },
-    },
-    trees: {
-        easy: { name: 'Maximum Depth of Binary Tree', link: 'https://leetcode.com/problems/maximum-depth-of-binary-tree/', difficulty: 'Easy', topic: 'Trees' },
-        medium: { name: 'Binary Tree Level Order Traversal', link: 'https://leetcode.com/problems/binary-tree-level-order-traversal/', difficulty: 'Medium', topic: 'Trees' },
-    },
-    dp: {
-        easy: { name: 'Climbing Stairs', link: 'https://leetcode.com/problems/climbing-stairs/', difficulty: 'Easy', topic: 'DP' },
-        medium: { name: 'Coin Change', link: 'https://leetcode.com/problems/coin-change/', difficulty: 'Medium', topic: 'DP' },
-    },
-    graphs: {
-        easy: { name: 'Flood Fill', link: 'https://leetcode.com/problems/flood-fill/', difficulty: 'Easy', topic: 'Graphs' },
-        medium: { name: 'Number of Islands', link: 'https://leetcode.com/problems/number-of-islands/', difficulty: 'Medium', topic: 'Graphs' },
-    },
-};
-
-function buildPersonalizedRecs(
-    cfStats: any,
-    weakTopics: string[],
-    lcStats: any,
-    lcUsername: string,
-    ghUsername: string,
-    ghStats: any,
-) {
-    const cfRating: number = cfStats?.rating || 800;
-
-    // ── DSA Recs ──
-    let pool = (problemBank as any[]).filter(p => p.rating >= cfRating - 200 && p.rating <= cfRating + 250);
-    if (pool.length < 5) pool = (problemBank as any[]).filter(p => Math.abs(p.rating - cfRating) <= 400);
-    if (pool.length === 0) pool = problemBank as any[];
-
-    const byWeak = pool.filter(p => weakTopics.some(wt =>
-        wt.toLowerCase().includes(p.topic.toLowerCase()) || p.topic.toLowerCase().includes(wt.toLowerCase())
-    ));
-    const byGeneral = pool.filter(p => !byWeak.includes(p));
-    const dsaSelected: any[] = [...byWeak.slice(0, 3)];
-    for (const p of byGeneral) { if (dsaSelected.length >= 6) break; dsaSelected.push(p); }
-
-    const dsaRecs = dsaSelected.map(p => ({
-        id: 'dsa_' + p.name,
-        type: 'dsa' as const,
-        content: {
-            title: p.name,
-            description: `Rating ${p.rating} · ${p.topic}${weakTopics.includes(p.topic) ? ' · ⚠ Weak Area' : ''}`,
-            link: p.link, topic: p.topic,
-            difficulty: p.rating >= 1500 ? 'Hard' : p.rating >= 1200 ? 'Medium' : 'Easy',
-        },
-    }));
-
-    // ── LeetCode recs (if connected) ──
-    const lcRecs: any[] = [];
-    if (lcUsername) {
-        const lcSolved = lcStats?.totalSolved || 0;
-        const level = lcSolved < 30 ? 'easy' : 'medium';
-        Object.values(LC_TOPICS).forEach(t => {
-            lcRecs.push({ id: 'lc_' + t[level].name, type: 'dsa', content: { ...t[level], description: `LeetCode · ${t[level].difficulty} · ${t[level].topic}` } });
-        });
-    }
-
-    // ── Open Source ──
-    const ghContribs = ghStats?.publicRepos || 0;
-    const osRecs = ghContribs < 5 || cfRating < 1200
-        ? OS_BEGINNER.map(o => ({ id: 'os_' + o.name, type: 'opensource' as const, content: o }))
-        : [...OS_BEGINNER.slice(0, 2), ...OS_INTERMEDIATE].map(o => ({ id: 'os_' + o.name, type: 'opensource' as const, content: o }));
-
-    // ── Web Projects ──
-    let webBase = WEB_BEGINNER;
-    if (cfRating >= 1200 || (lcStats?.totalSolved || 0) > 50) webBase = [...WEB_BEGINNER, ...WEB_REACT];
-    if (cfRating >= 1500 || (lcStats?.totalSolved || 0) > 100) webBase = [...WEB_REACT, ...WEB_BACKEND];
-    const webRecs = webBase.map(w => ({ id: 'web_' + w.name, type: 'webdev' as const, content: w }));
-
-    return [...dsaRecs, ...lcRecs, ...osRecs, ...webRecs];
-}
+// ── Problem card ──────────────────────────────────────────────────────────────
+const ProblemCard: React.FC<{ prob: DSAProblem }> = ({ prob }) => (
+    <a href={prob.link} target="_blank" rel="noreferrer"
+        className="retro-panel p-4 block group transition-all duration-300 border-brand-border/30 hover:border-brand-accent bg-brand-bg/40">
+        <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <ExternalLink size={11} className="text-brand-accent" />
+        </div>
+        <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary">{prob.topic}</span>
+            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${prob.difficulty === 'Hard' ? 'text-red-400 border-red-400/30 bg-red-400/5' : prob.difficulty === 'Medium' ? 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5' : 'text-green-400 border-green-400/30 bg-green-400/5'}`}>
+                {prob.difficulty} · {prob.rating}
+            </span>
+        </div>
+        <p className="font-bold font-mono text-sm text-brand-primary group-hover:text-brand-accent transition-colors line-clamp-1">{prob.name}</p>
+    </a>
+);
 
 export const Suggestions: React.FC = () => {
     const { user } = useAuth();
-    const [recommendations, setRecommendations] = useState<any[]>([]);
+    const [dsaResult, setDsaResult] = useState<DSASuggestionResult | null>(null);
     const [cfStats, setCfStats] = useState<any>(null);
     const [lcStats, setLcStats] = useState<any>(null);
-    const [handles, setHandles] = useState({ cf: '', lc: '', gh: '' });
-    const [analysis, setAnalysis] = useState<{ dsa: string; opensource: string; webdev: string }>({
-        dsa: 'Loading your profile...', opensource: '', webdev: '',
-    });
+    const [ghStats, setGhStats] = useState<any>(null);
+    const [cfRating, setCfRating] = useState(0);
+    const [lcSolved, setLcSolved] = useState(0);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>('dsa');
@@ -140,59 +67,46 @@ export const Suggestions: React.FC = () => {
             const supabase = await getSupabaseClient();
             if (!supabase) return;
 
-            // Load handles
-            const { data: userRow } = await supabase
-                .from('users').select('codeforces_handle, leetcode_username, github_username').eq('id', user.id).single();
-            const cfHandle = userRow?.codeforces_handle || '';
-            const lcUsername = userRow?.leetcode_username || '';
-            const ghUsername = userRow?.github_username || '';
-            setHandles({ cf: cfHandle, lc: lcUsername, gh: ghUsername });
-
-            // Load external_stats
-            let { data: extRow } = await supabase
-                .from('external_stats').select('cf, lc, gh').eq('user_id', user.id).single();
-
-            // Auto-fetch CF stats if missing or forced
-            if (cfHandle && (force || !extRow?.cf?.rating)) {
-                setSyncing(true);
-                const fresh = await fetchCodeforcesStats(cfHandle);
-                if (fresh) {
-                    await supabase.from('external_stats').upsert({
-                        user_id: user.id, cf: fresh, last_synced: new Date().toISOString()
-                    }).catch(() => { });
-                    extRow = { ...extRow, cf: fresh };
-                }
-                setSyncing(false);
-            }
+            // Load external stats
+            const { data: extRow } = await supabase
+                .from('external_stats')
+                .select('cf, lc, gh')
+                .eq('user_id', user.id)
+                .single();
 
             const cf = extRow?.cf || null;
             const lc = extRow?.lc || null;
             const gh = extRow?.gh || null;
-            const weakTopics: string[] = cf?.weakTopics || [];
+
             setCfStats(cf);
             setLcStats(lc);
+            setGhStats(gh);
+            setCfRating(cf?.rating || 0);
+            setLcSolved(lc?.totalSolved || 0);
 
-            const recs = buildPersonalizedRecs(cf, weakTopics, lc, lcUsername, ghUsername, gh);
-            setRecommendations(recs);
+            // Auto-fetch CF stats if handle exists but no rating yet or forced
+            if (force || !cf?.rating) {
+                const { data: userRow } = await supabase
+                    .from('users').select('codeforces_handle').eq('id', user.id).single();
+                const cfHandle = userRow?.codeforces_handle?.trim();
+                if (cfHandle) {
+                    setSyncing(true);
+                    const { fetchCodeforcesStats } = await import('../api/codeforcesApi');
+                    const freshCF = await fetchCodeforcesStats(cfHandle);
+                    if (freshCF) {
+                        await supabase.from('external_stats').upsert({
+                            user_id: user.id, cf: freshCF, last_synced: new Date().toISOString()
+                        }).catch(() => { });
+                        setCfStats(freshCF);
+                        setCfRating(freshCF.rating || 0);
+                    }
+                    setSyncing(false);
+                }
+            }
 
-            // Build contextual analysis text
-            const cfRating = cf?.rating || 800;
-            const cfSolved = cf?.problemsSolved || 0;
-            const lcSolved = lc?.totalSolved || 0;
-            setAnalysis({
-                dsa: cfHandle
-                    ? `CF: ${cfHandle} · Rating ${cfRating} (${cf?.rank || 'unrated'}) · ${cfSolved} solved${lcUsername ? ` · LC: ${lcSolved} solved` : ''}${weakTopics.length ? ' · Weak: ' + weakTopics.slice(0, 3).join(', ') : ''}`
-                    : 'No Codeforces handle linked. Add it in Profile to get personalized DSA targets.',
-                opensource: gh
-                    ? `${ghUsername} · ${gh.publicRepos || 0} public repos · Showing ${gh.publicRepos < 5 || cfRating < 1200 ? 'beginner' : 'intermediate'} open source programs based on your level.`
-                    : 'Link your GitHub in Profile to get programs matched to your contribution level.',
-                webdev: cfRating >= 1500 || lcSolved > 100
-                    ? 'You have strong foundation. Showing full-stack and backend projects.'
-                    : cfRating >= 1200 || lcSolved > 50
-                        ? 'Solid progress! Showing React + intermediate web projects.'
-                        : 'Beginner-to-intermediate projects to build your portfolio.',
-            });
-
+            // Run the two-track DSA engine
+            const result = await runDSASuggestionEngine(user.id);
+            setDsaResult(result);
         } catch (e) {
             console.error('Suggestions load error:', e);
         } finally {
@@ -202,125 +116,198 @@ export const Suggestions: React.FC = () => {
 
     useEffect(() => { loadData(false); }, [user]);
 
-    const handleRefresh = () => loadData(true);
-
-    const activeRecs = recommendations.filter(r =>
-        activeTab === 'dsa' ? (r.type === 'dsa')
-            : activeTab === 'opensource' ? r.type === 'opensource'
-                : r.type === 'webdev' || r.type === 'project'
-    );
-
-    const TabIcon = activeTab === 'dsa' ? Terminal : activeTab === 'opensource' ? Github : LayoutTemplate;
-    const tabColor = activeTab === 'dsa' ? 'text-brand-accent' : activeTab === 'opensource' ? 'text-green-400' : 'text-brand-primary';
+    // ── Render ──────────────────────────────────────────────────────────────
+    const ghContribs = ghStats?.publicRepos || 0;
+    const osRecs = ghContribs < 5 || cfRating < 1200 ? OS_BEGINNER : [...OS_BEGINNER.slice(0, 2), ...OS_INTERMEDIATE];
+    const webRecs = cfRating >= 1200 || lcSolved > 50 ? [...WEB_BEGINNER, ...WEB_ADVANCED] : WEB_BEGINNER;
 
     if (loading) return (
         <div className="retro-panel p-12 text-center mt-8 animate-fade-in">
             <Brain className="w-16 h-16 mx-auto text-brand-secondary/30 mb-4 animate-pulse" />
-            <h3 className="text-brand-secondary font-mono tracking-widest uppercase mb-2">Scanning Your Profile...</h3>
-            {syncing && <p className="text-xs font-mono text-brand-accent animate-pulse">Fetching live CF stats...</p>}
+            <h3 className="text-brand-secondary font-mono tracking-widest uppercase mb-2">Building Your Plan...</h3>
+            {syncing && <p className="text-xs font-mono text-brand-accent animate-pulse mt-1">Fetching Codeforces data...</p>}
         </div>
     );
 
     return (
         <div className="space-y-8 animate-fade-in pb-12">
+            {/* Header */}
             <header className="mb-6 border-b border-brand-border pb-4 flex items-center justify-between">
                 <div>
                     <h2 className="text-2xl font-bold retro-text tracking-widest uppercase mb-1 flex items-center gap-3">
                         <Zap className="text-brand-accent" /> Targeted Practice
                     </h2>
-                    <p className="retro-text-sub">
-                        Personalized targets based on your current state
-                        {cfStats && <span className="text-green-400 ml-2">· CF Rating: {cfStats.rating} · {cfStats.problemsSolved} solved</span>}
-                    </p>
+                    <p className="retro-text-sub">Structured, personalized practice — no random mixing</p>
                 </div>
-                <button onClick={handleRefresh} disabled={syncing || loading}
+                <button onClick={() => loadData(true)} disabled={syncing || loading}
                     className="flex items-center gap-2 px-3 py-1.5 border border-brand-primary/30 text-brand-primary font-mono text-xs rounded hover:bg-brand-primary/10 transition-colors disabled:opacity-40">
-                    <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
-                    {syncing ? 'Syncing CF...' : 'Refresh'}
+                    <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} /> Refresh
                 </button>
             </header>
 
-            {/* Stats bar */}
-            {(cfStats || lcStats) && (
-                <div className="flex flex-wrap gap-3">
-                    {cfStats && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-yellow-400/20 bg-yellow-400/5 text-xs font-mono text-yellow-400">
-                            <Trophy size={12} /> CF: {cfStats.rating} · {cfStats.rank} · {cfStats.problemsSolved} solved
-                        </div>
-                    )}
-                    {lcStats && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-orange-400/20 bg-orange-400/5 text-xs font-mono text-orange-400">
-                            <Code2 size={12} /> LeetCode: {lcStats.totalSolved} solved
-                        </div>
-                    )}
-                    {!handles.cf && !handles.lc && (
-                        <a href="/profile" className="flex items-center gap-2 px-3 py-1.5 rounded border border-brand-accent/30 bg-brand-accent/5 text-xs font-mono text-brand-accent hover:underline">
-                            <CheckCircle size={12} /> Link CF / LeetCode in Profile →
-                        </a>
-                    )}
-                </div>
-            )}
+            {/* Stats row */}
+            <div className="flex flex-wrap gap-3">
+                {cfStats ? (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-yellow-400/30 bg-yellow-400/5 text-xs font-mono text-yellow-400">
+                        <Trophy size={12} /> CF: {cfStats.rating} · {cfStats.rank} · {cfStats.problemsSolved} solved
+                        <CheckCircle size={11} className="text-green-400 ml-1" />
+                    </div>
+                ) : (
+                    <a href="/profile" className="flex items-center gap-2 px-3 py-1.5 rounded border border-red-400/30 bg-red-400/5 text-xs font-mono text-red-400 hover:underline">
+                        <AlertCircle size={12} /> CF not connected — Go to Profile
+                    </a>
+                )}
+                {lcStats && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-orange-400/20 bg-orange-400/5 text-xs font-mono text-orange-400">
+                        <Code2 size={12} /> LeetCode: {lcStats.totalSolved} solved
+                    </div>
+                )}
+            </div>
 
             {/* TABS */}
             <div className="flex border-b border-brand-border/50 gap-6">
-                {([['dsa', 'Algorithmic (DSA)', Terminal], ['opensource', 'Open Source', Github], ['webdev', 'Web Projects', LayoutTemplate]] as const).map(([t, label, Icon]) => (
-                    <button key={t} onClick={() => setActiveTab(t)}
-                        className={`pb-3 font-mono text-sm tracking-wide uppercase transition-colors relative flex items-center gap-2 ${activeTab === t ? (t === 'dsa' ? 'text-brand-accent font-bold' : t === 'opensource' ? 'text-green-400 font-bold' : 'text-brand-primary font-bold') : 'text-brand-secondary hover:text-brand-primary'}`}>
+                {([['dsa', 'Algorithmic (DSA)', Terminal] as const, ['opensource', 'Open Source', Github] as const, ['webdev', 'Web Projects', LayoutTemplate] as const]).map(([t, label, Icon]) => (
+                    <button key={t} onClick={() => setActiveTab(t as TabType)}
+                        className={`pb-3 font-mono text-sm tracking-wide uppercase transition-colors relative flex items-center gap-2
+                            ${activeTab === t ? (t === 'dsa' ? 'text-brand-accent font-bold' : t === 'opensource' ? 'text-green-400 font-bold' : 'text-brand-primary font-bold') : 'text-brand-secondary hover:text-brand-primary'}`}>
                         <Icon size={15} /> {label}
                         {activeTab === t && <span className={`absolute bottom-0 left-0 right-0 h-[2px] rounded-t-md ${t === 'dsa' ? 'bg-brand-accent' : t === 'opensource' ? 'bg-green-400' : 'bg-brand-primary'}`} />}
                     </button>
                 ))}
             </div>
 
-            <div className="animate-fade-in">
-                {/* Analysis Banner */}
-                <div className="retro-panel p-5 border-brand-accent/30 bg-brand-accent/5 mb-6 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-accent/60 to-transparent" />
-                    <h3 className="text-xs font-mono uppercase text-brand-accent tracking-widest mb-2 flex items-center gap-2">
-                        <MessageSquareText size={13} /> Targeted AI Intelligence
-                    </h3>
-                    <p className="text-brand-primary text-sm font-mono leading-relaxed">{analysis[activeTab]}</p>
-                </div>
+            {/* ── DSA Tab ─────────────────────────────────────────────────── */}
+            {activeTab === 'dsa' && (
+                <div className="space-y-8 animate-fade-in">
+                    {dsaResult?.error ? (
+                        /* Not enough data — show guidance message */
+                        <div className="retro-panel p-10 text-center border-brand-border/30">
+                            <AlertCircle className="w-12 h-12 mx-auto text-brand-accent/40 mb-4" />
+                            <h3 className="text-brand-accent font-mono uppercase tracking-widest mb-2">Sync Required</h3>
+                            <p className="text-sm text-brand-secondary font-mono mb-4 leading-relaxed">{dsaResult.error}</p>
+                            <a href="/profile" className="inline-flex items-center gap-2 px-5 py-2 border border-brand-primary/40 text-brand-primary font-mono text-xs rounded hover:bg-brand-primary/10">
+                                Go to Profile <ChevronRight size={13} />
+                            </a>
+                        </div>
+                    ) : (
+                        <>
+                            {/* ── SECTION A: Rating Progression ─── */}
+                            {dsaResult?.ratingProgression && (
+                                <section>
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-8 h-8 rounded-lg bg-brand-accent/10 border border-brand-accent/30 flex items-center justify-center">
+                                            <TrendingUp size={15} className="text-brand-accent" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold font-mono text-brand-accent uppercase tracking-wide">🔥 Rating Progression</h3>
+                                            <p className="text-xs font-mono text-brand-secondary">
+                                                Target range: {dsaResult.ratingProgression.targetRange} · Current: {dsaResult.ratingProgression.currentRating} ({dsaResult.ratingProgression.rank})
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative">
+                                        {dsaResult.ratingProgression.problems.map((p, i) => (
+                                            <ProblemCard key={i} prob={p} />
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
 
-                {activeRecs.length === 0 ? (
-                    <div className="retro-panel p-12 text-center">
-                        <FolderGit2 className="w-12 h-12 mx-auto text-brand-secondary/30 mb-4" />
-                        <p className="text-brand-secondary font-mono text-sm">No targets found. Link your handles in Profile.</p>
-                        <a href="/profile" className="mt-3 inline-flex items-center gap-1 text-xs text-brand-accent font-mono hover:underline">
-                            Go to Profile →
-                        </a>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {activeRecs.map((q) => {
-                            const isWeak = q.content?.description?.includes('Weak Area');
-                            const borderClass = activeTab === 'dsa' ? 'border-brand-accent/20 hover:border-brand-accent'
-                                : activeTab === 'opensource' ? 'border-green-500/20 hover:border-green-500'
-                                    : 'border-brand-primary/20 hover:border-brand-primary';
-                            return (
-                                <a key={q.id} href={q.content?.link || '#'} target="_blank" rel="noreferrer"
-                                    className={`retro-panel p-5 block group transition-all duration-300 relative overflow-hidden ${borderClass} ${isWeak ? 'ring-1 ring-yellow-400/30' : ''}`}>
-                                    {isWeak && (
-                                        <div className="absolute top-2 right-2 text-[9px] font-mono text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 px-1.5 py-0.5 rounded">⚠ WEAK</div>
+                            {/* ── SECTION B: Topic Mastery ─── */}
+                            {dsaResult?.topicMastery && (
+                                <section>
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
+                                            <BookOpen size={15} className="text-blue-400" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold font-mono text-blue-400 uppercase tracking-wide">
+                                                📘 Topic Mastery — {dsaResult.topicMastery.currentTopic}
+                                            </h3>
+                                            <p className="text-xs font-mono text-brand-secondary">
+                                                Roadmap progress: {dsaResult.topicMastery.roadmapProgress}% ·
+                                                Success rate: {dsaResult.topicMastery.successRate}%
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Pattern focus badges */}
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        <span className="text-[10px] font-mono text-brand-secondary uppercase tracking-widest mt-1">Focus:</span>
+                                        {dsaResult.topicMastery.patternFocus.map(p => (
+                                            <span key={p} className="text-[10px] font-mono px-2 py-1 rounded border border-blue-400/20 text-blue-400 bg-blue-400/5">
+                                                {p}
+                                            </span>
+                                        ))}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {dsaResult.topicMastery.problems.map((p, i) => (
+                                            <ProblemCard key={i} prob={p} />
+                                        ))}
+                                    </div>
+
+                                    {/* Next topic suggestion */}
+                                    {dsaResult.topicMastery.nextTopicSuggestion && (
+                                        <div className="mt-4 retro-panel p-4 border-green-400/20 bg-green-400/5 flex items-center gap-3">
+                                            <Target size={16} className="text-green-400 flex-shrink-0" />
+                                            <p className="text-sm font-mono text-green-400">
+                                                🎉 {dsaResult.topicMastery.currentTopic} is {dsaResult.topicMastery.roadmapProgress}% complete!
+                                                <span className="text-brand-secondary ml-2">Start next: <strong>{dsaResult.topicMastery.nextTopicSuggestion}</strong></span>
+                                            </p>
+                                        </div>
                                     )}
-                                    <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <ExternalLink size={12} className={tabColor} />
-                                    </div>
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <TabIcon size={13} className={tabColor} />
-                                        <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary">{q.content?.topic}</span>
-                                    </div>
-                                    <h4 className={`font-bold font-mono text-sm leading-snug mb-2 transition-colors ${tabColor}`}>{q.content?.title || q.content?.name}</h4>
-                                    <p className="text-brand-secondary/80 text-xs mb-4 line-clamp-3 leading-relaxed">{q.content?.description}</p>
-                                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${q.content?.difficulty === 'Hard' ? 'text-red-400 bg-red-400/10 border-red-400/20' : q.content?.difficulty === 'Medium' ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20' : 'text-green-400 bg-green-400/10 border-green-400/20'}`}>
-                                        {q.content?.difficulty || 'Easy'}
-                                    </span>
-                                </a>
-                            );
-                        })}
+                                </section>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* ── Open Source Tab ──────────────────────────────────────────── */}
+            {activeTab === 'opensource' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 animate-fade-in">
+                    {osRecs.map((o) => (
+                        <a key={o.name} href={o.link} target="_blank" rel="noreferrer"
+                            className="retro-panel p-5 block group border-green-500/20 hover:border-green-500 bg-brand-bg/40 transition-all">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Github size={13} className="text-green-400" />
+                                <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary">{o.topic}</span>
+                            </div>
+                            <h4 className="font-bold font-mono text-sm text-green-400 group-hover:text-green-300 transition-colors mb-2">{o.name}</h4>
+                            <p className="text-xs text-brand-secondary/80 mb-4 leading-relaxed">{o.description}</p>
+                            <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${o.difficulty === 'Hard' ? 'text-red-400 border-red-400/20' : o.difficulty === 'Medium' ? 'text-yellow-400 border-yellow-400/20' : 'text-green-400 border-green-400/20'}`}>
+                                {o.difficulty}
+                            </span>
+                        </a>
+                    ))}
+                </div>
+            )}
+
+            {/* ── Web Projects Tab ─────────────────────────────────────────── */}
+            {activeTab === 'webdev' && (
+                <div className="space-y-4 animate-fade-in">
+                    <p className="text-xs font-mono text-brand-secondary/60 border border-brand-border/30 rounded px-3 py-2">
+                        {cfRating >= 1200 || lcSolved > 50 ? 'Intermediate + Advanced projects matched to your level.' : 'Starter projects to build your portfolio. Unlock advanced at CF 1200+ or 50 LC solved.'}
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {webRecs.map((w) => (
+                            <a key={w.name} href={w.link} target="_blank" rel="noreferrer"
+                                className="retro-panel p-5 block group border-brand-primary/20 hover:border-brand-primary bg-brand-bg/40 transition-all">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <LayoutTemplate size={13} className="text-brand-primary" />
+                                    <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary">{w.topic}</span>
+                                </div>
+                                <h4 className="font-bold font-mono text-sm text-brand-accent group-hover:text-brand-primary transition-colors mb-2">{w.name}</h4>
+                                <p className="text-xs text-brand-secondary/80 mb-4 leading-relaxed">{w.description}</p>
+                                <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${w.difficulty === 'Hard' ? 'text-red-400 border-red-400/20' : w.difficulty === 'Medium' ? 'text-yellow-400 border-yellow-400/20' : 'text-green-400 border-green-400/20'}`}>
+                                    {w.difficulty}
+                                </span>
+                            </a>
+                        ))}
                     </div>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     );
 };

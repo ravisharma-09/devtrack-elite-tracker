@@ -66,12 +66,22 @@ export const Profile: React.FC = () => {
             const saved = await saveUserHandles(user.id, handles);
             setSyncMsg(saved ? 'Saved to Supabase ✓ — fetching stats...' : 'Could not save to DB (schema not applied?), fetching anyway...');
             setSyncing(true);
-            // Pass handles directly — don't re-read from Supabase (circular bug avoided)
             const result = await syncExternalStats(user.id, true, handles);
-            setExternalStats(result); // Instantly updates global store & UI
+            setExternalStats(result);
+
+            // Mark connection status persistently
+            const supabase = await (await import('../backend/supabaseClient')).getSupabaseClient();
+            if (supabase) {
+                await supabase.from('users').update({
+                    cf_connected: !!result.cf,
+                    lc_connected: !!result.lc,
+                    gh_connected: !!result.gh,
+                    ...(((result.cf as any)?.weakTopics) ? { weak_topics: (result.cf as any).weakTopics } : {}),
+                }).eq('id', user.id).catch(() => { });
+            }
 
             if (result.cf || result.lc || result.gh) {
-                setSyncMsg(`✓ Done! Check Statistics page. ${[result.cf && 'CF', result.lc && 'LC', result.gh && 'GH'].filter(Boolean).join(', ')} synced.`);
+                setSyncMsg(`✓ Done! ${[result.cf && 'CF', result.lc && 'LC', result.gh && 'GH'].filter(Boolean).join(', ')} synced and connected permanently.`);
             } else {
                 setSyncMsg('⚠ Fetched but got no data. Check handles are correct + open DevTools console for details.');
             }

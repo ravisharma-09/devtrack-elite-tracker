@@ -155,6 +155,11 @@ create policy "Users can CRUD own GH stats" on public.github_stats for all using
 alter table public.users add column if not exists codeforces_handle text default '';
 alter table public.users add column if not exists leetcode_username text default '';
 alter table public.users add column if not exists github_username text default '';
+alter table public.users add column if not exists cf_connected boolean default false;
+alter table public.users add column if not exists lc_connected boolean default false;
+alter table public.users add column if not exists gh_connected boolean default false;
+alter table public.users add column if not exists weak_topics text[] default '{}';
+alter table public.users add column if not exists strong_topics text[] default '{}';
 
 -- ════════════════════════════════════════════════════
 -- 10. AUTO-CREATE USER PROFILE ON SIGNUP (trigger)

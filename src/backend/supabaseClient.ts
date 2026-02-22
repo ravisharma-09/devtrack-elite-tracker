@@ -20,7 +20,13 @@ export async function getSupabaseClient() {
 
     try {
         const { createClient } = await import('@supabase/supabase-js');
-        _supabase = createClient(supabaseUrl, supabaseKey);
+        _supabase = createClient(supabaseUrl, supabaseKey, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true,
+            }
+        });
         return _supabase;
     } catch {
         console.warn('[DevTrack] Supabase not available. Running in offline mode.');
