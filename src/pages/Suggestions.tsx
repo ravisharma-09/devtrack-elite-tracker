@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Brain, Zap, Terminal, LayoutTemplate, Github, FolderGit2, MessageSquareText, ExternalLink, CheckCircle } from 'lucide-react';
+import { Brain, Zap, Terminal, LayoutTemplate, Github, FolderGit2, MessageSquareText, ExternalLink, CheckCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
 import problemBank from '../data/problemBank.json';
+import { fetchCodeforcesStats } from '../api/codeforcesApi';
 
 type TabType = 'dsa' | 'opensource' | 'webdev';
 
@@ -90,12 +91,31 @@ export const Suggestions: React.FC = () => {
                     .eq('id', user.id)
                     .single();
 
-                // 2. Load external stats (real CF rating, LC stats, GH stats)
-                const { data: extStats } = await supabase
+                // 2. Load external stats — or fetch live from CF API if missing/stale
+                let { data: extStats } = await supabase
                     .from('external_stats')
                     .select('cf, lc, gh')
                     .eq('user_id', user.id)
                     .single();
+
+                // Auto-sync: if CF handle exists but no real rating yet, fetch from CF API now
+                const cfHandle = userRow?.codeforces_handle || '';
+                const existingRating = extStats?.cf?.rating;
+                const needsSync = cfHandle && (!existingRating || existingRating < 1);
+                if (needsSync) {
+                    console.log('🔄 Auto-syncing CF stats for:', cfHandle);
+                    const freshCF = await fetchCodeforcesStats(cfHandle);
+                    if (freshCF) {
+                        // Save to external_stats for future loads
+                        await supabase.from('external_stats').upsert({
+                            user_id: user.id,
+                            cf: freshCF,
+                            last_synced: new Date().toISOString()
+                        }).catch(() => { });
+                        extStats = { ...extStats, cf: freshCF };
+                        console.log('✅ CF stats saved: rating', freshCF.rating, 'solved', freshCF.problemsSolved);
+                    }
+                }
 
                 // 3. Load roadmap topics in progress
                 const { data: roadmapData } = await supabase

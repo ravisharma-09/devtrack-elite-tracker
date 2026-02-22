@@ -228,10 +228,18 @@ export const GitHubHub: React.FC = () => {
             try {
                 const supabase = await getSupabaseClient();
                 if (!supabase) return;
-                const { data } = await supabase.from('profiles').select('github_username').eq('id', user.id).single();
-                if (data?.github_username) {
-                    setGithubUsername(data.github_username);
-                    await fetchGitHubData(data.github_username);
+
+                // Read from `users` table — this is where Profile page saves handles
+                const { data: userRow } = await supabase
+                    .from('users')
+                    .select('github_username, codeforces_handle')
+                    .eq('id', user.id)
+                    .single();
+
+                const ghUsername = userRow?.github_username || '';
+                if (ghUsername) {
+                    setGithubUsername(ghUsername);
+                    await fetchGitHubData(ghUsername);
                 }
             } catch (e) {
                 console.error('Profile fetch error:', e);
