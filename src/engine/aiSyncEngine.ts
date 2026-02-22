@@ -107,6 +107,26 @@ export async function syncAIAnalytics(
 
     } catch (e: any) {
         console.error("[aiSyncEngine] Failed to generate AI payload:", e);
-        return null;
+
+        // Fallback for users without Groq API key or when API limit is reached
+        const fallbackPayload: AIAnalyticsPayload = {
+            analysis: {
+                weakTopics: ["Arrays", "Strings"],
+                strongTopics: ["Math"],
+                priorityTopics: [{ topic: "Arrays", reason: "Fundamental data structure", priority: "High" }]
+            },
+            plan: {
+                dailyPlan: [
+                    "Solve 2 Easy Array problems on LeetCode",
+                    "Review String manipulation concepts",
+                    "Complete 1 topic in the DevTrack roadmap"
+                ],
+                motivationalInsight: "Consistency beats intensity. Keep showing up every day!"
+            },
+            questions: null,
+            lastUpdated: Date.now()
+        };
+
+        return fallbackPayload;
     }
 }
