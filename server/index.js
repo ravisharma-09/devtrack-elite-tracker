@@ -208,6 +208,16 @@ const server = http.createServer((req, res) => {
     jsonRes(res, 404, { error: 'Not found' });
 });
 
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`\n❌ Port ${PORT} is already in use.`);
+        console.error(`   Run: kill $(lsof -ti:${PORT}) && npm run api\n`);
+    } else {
+        console.error('Server error:', err);
+    }
+    process.exit(1);
+});
+
 server.listen(PORT, () => {
     console.log('\n🚀 DevTrack Proxy API — http://localhost:' + PORT);
     console.log('   /api/cf/:handle   → Codeforces');
