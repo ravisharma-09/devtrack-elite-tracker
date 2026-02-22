@@ -96,9 +96,14 @@ export const Sidebar: React.FC = () => {
                         </button>
                     </div>
                 )}
-                <div className="flex items-center justify-center gap-2 text-brand-secondary text-xs">
-                    <span className="w-2 h-2 rounded-full bg-brand-primary animate-pulse inline-block" />
-                    System Online
+                <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="flex items-center justify-center gap-2 text-brand-secondary text-xs">
+                        <span className="w-2 h-2 rounded-full bg-brand-primary animate-pulse inline-block" />
+                        System Online
+                    </div>
+                    <div className="text-[10px] font-mono text-brand-secondary/40 uppercase tracking-widest">
+                        Made by Ravi sharma
+                    </div>
                 </div>
             </div>
         </div>
