@@ -10,6 +10,7 @@ import { Suggestions } from './pages/Suggestions';
 import { Leaderboard } from './pages/Leaderboard';
 import { ActivityFeed } from './pages/Activity';
 import { Profile } from './pages/Profile';
+import { GitHubHub } from './pages/GitHubHub';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -17,22 +18,14 @@ import { ResetPassword } from './pages/ResetPassword';
 import { useEffect } from 'react';
 import { useAuth } from './auth/AuthContext';
 import { bootstrapUser } from './core/bootstrap';
-import { getSupabaseClient } from './backend/supabaseClient';
 
 function AppContent() {
   const { user } = useAuth();
 
   useEffect(() => {
     if (user) {
-      const init = async () => {
-        const supabase = await getSupabaseClient();
-        if (!supabase) return;
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        if (authUser) {
-          await bootstrapUser(authUser.id);
-        }
-      };
-      init();
+      // Use user.id directly from AuthContext — avoids the broken supabase.auth.getUser() 403
+      bootstrapUser(user.id).catch(e => console.warn('Bootstrap error:', e));
     }
   }, [user]);
 
@@ -58,6 +51,7 @@ function AppContent() {
           <Route path="leaderboard" element={<Leaderboard />} />
           <Route path="activity" element={<ActivityFeed />} />
           <Route path="statistics" element={<Statistics />} />
+          <Route path="github" element={<GitHubHub />} />
           <Route path="profile" element={<Profile />} />
         </Route>
 
