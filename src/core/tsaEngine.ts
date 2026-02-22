@@ -1,26 +1,25 @@
 import { getSupabaseClient } from '../backend/supabaseClient';
 
-export async function tsaEngine(userIdParam: string) {
-    console.log("Running TSA");
+export async function tsaEngine(userId: string) {
+    if (!userId) {
+        console.error('❌ TSA Engine: No userId provided.');
+        return;
+    }
+    console.log('🧠 Running TSA Analysis for user:', userId);
+
     const supabase = await getSupabaseClient();
     if (!supabase) return;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const verifiedUserId = user?.id;
-    if (!verifiedUserId) {
-        console.error("❌ TSA Engine: No authenticated user found.");
-        return;
-    }
-
     try {
-        console.log("🧠 Running TSA Analysis...");
-        // Query problem_attempts for user
         const { data: attempts } = await supabase
             .from('problem_attempts')
             .select('*')
-            .eq('user_id', verifiedUserId);
+            .eq('user_id', userId);
 
-        if (!attempts || attempts.length === 0) return;
+        if (!attempts || attempts.length === 0) {
+            console.log('ℹ️ TSA: No problem attempts found, skipping analysis.');
+            return;
+        }
 
         // Group by topic
         const topicStats: Record<string, { attempts: number; solved: number; ratings: number[] }> = {};
@@ -47,7 +46,6 @@ export async function tsaEngine(userIdParam: string) {
         let rollingAverageSum = 0;
         let rollingAverageCount = 0;
 
-        // Calculate success_rate, avg_rating, max_rating
         for (const [topic, stats] of Object.entries(topicStats)) {
             totalSolved += stats.solved;
             const successRate = stats.attempts > 0 ? (stats.solved / stats.attempts) * 100 : 0;
@@ -63,7 +61,6 @@ export async function tsaEngine(userIdParam: string) {
                 rollingAverageCount++;
             }
 
-            // Classify
             if (successRate > 80 && avgRating > 1200) {
                 strongTopics.push(topic);
             } else if (successRate < 50 || (successRate >= 50 && successRate <= 80 && avgRating < 1200)) {
@@ -72,8 +69,6 @@ export async function tsaEngine(userIdParam: string) {
         }
 
         const globalAvgRating = rollingAverageCount > 0 ? Math.round(rollingAverageSum / rollingAverageCount) : 0;
-
-        // Calculate abstract skill score based on Codeforces + generic metrics
         const baseScore = totalSolved * 10;
         const ratingBonus = globalAvgRating > 0 ? globalAvgRating : 0;
         const skillScore = baseScore + ratingBonus;
@@ -83,7 +78,6 @@ export async function tsaEngine(userIdParam: string) {
         else if (skillScore > 2000) level = 'Advanced';
         else if (skillScore > 500) level = 'Intermediate';
 
-        // Update profiles table
         await supabase
             .from('profiles')
             .update({
@@ -93,11 +87,11 @@ export async function tsaEngine(userIdParam: string) {
                 problems_solved: totalSolved,
                 current_level: level
             })
-            .eq('id', verifiedUserId);
+            .eq('id', userId);
 
-        console.log("✅ TSA Engine Completed");
+        console.log('✅ TSA Engine Completed');
 
     } catch (e) {
-        console.error("TSA Engine Execution Failed:", e);
+        console.error('TSA Engine Execution Failed:', e);
     }
 }
