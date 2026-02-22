@@ -20,6 +20,7 @@ export const Profile: React.FC = () => {
     const [lcUsername, setLcUsername] = useState('');
     const [ghUsername, setGhUsername] = useState('');
     const [savingHandles, setSavingHandles] = useState(false);
+    const [savedHandles, setSavedHandles] = useState({ cf: '', lc: '', gh: '' });
     const [syncing, setSyncing] = useState(false);
     const [syncMsg, setSyncMsg] = useState('');
 
@@ -38,6 +39,11 @@ export const Profile: React.FC = () => {
             setCfHandle(h.codeforces_handle || '');
             setLcUsername(h.leetcode_username || '');
             setGhUsername(h.github_username || '');
+            setSavedHandles({
+                cf: h.codeforces_handle || '',
+                lc: h.leetcode_username || '',
+                gh: h.github_username || ''
+            });
         }).catch(() => { });
     }, [user?.id]);
 
@@ -65,6 +71,11 @@ export const Profile: React.FC = () => {
             setSyncMsg('Saving handles...');
             const saved = await saveUserHandles(user.id, handles);
             setSyncMsg(saved ? 'Saved to Supabase ✓ — fetching stats...' : 'Could not save to DB (schema not applied?), fetching anyway...');
+            setSavedHandles({
+                cf: handles.codeforces_handle,
+                lc: handles.leetcode_username,
+                gh: handles.github_username
+            });
             setSyncing(true);
             const result = await syncExternalStats(user.id, true, handles);
             setExternalStats(result);
@@ -173,23 +184,28 @@ export const Profile: React.FC = () => {
                     <div className="space-y-1">
                         <label className="flex items-center justify-between text-xs font-mono text-brand-secondary uppercase tracking-widest">
                             <span className="flex items-center gap-2"><Trophy size={15} className="text-yellow-400" /> Codeforces Handle</span>
-                            {externalStats?.cf
+                            {savedHandles.cf
                                 ? <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>
-                                : cfHandle.trim() && <span className="text-red-400/70 text-[10px] flex items-center gap-1">⚠ Not fetched — click Connect</span>
+                                : cfHandle.trim() && <span className="text-red-400/70 text-[10px] flex items-center gap-1">⚠ Not saved — click Connect</span>
                             }
                         </label>
                         <div className="flex gap-2">
                             <input value={cfHandle} onChange={e => setCfHandle(e.target.value)} placeholder="tourist"
                                 className="flex-1 bg-brand-bg border border-brand-border text-brand-primary font-mono text-sm px-3 py-2 rounded focus:outline-none focus:border-brand-primary/60 placeholder:text-brand-secondary/30" />
-                            <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
-                                className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
+                            {cfHandle === savedHandles.cf && savedHandles.cf !== '' ? (
+                                <button onClick={() => forceSync()} disabled={syncing}
+                                    className="px-6 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Sync</button>
+                            ) : (
+                                <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
+                                    className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
+                            )}
                         </div>
-                        {externalStats?.cf
+                        {savedHandles.cf
                             ? <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">
-                                {externalStats.cf.rating} Rating · {externalStats.cf.rank} · {externalStats.cf.problemsSolved} Solved
+                                {externalStats?.cf ? `${externalStats.cf.rating} Rating · ${externalStats.cf.rank} · ${externalStats.cf.problemsSolved} Solved` : 'Connected. Awaiting stats sync...'}
                             </div>
                             : cfHandle.trim() && <div className="text-xs font-mono text-brand-secondary/50 mt-1 ml-1">
-                                Handle saved. Click Connect to verify and fetch rating.
+                                Handle typed. Click Connect to verify and fetch rating.
                             </div>
                         }
                     </div>
@@ -198,22 +214,35 @@ export const Profile: React.FC = () => {
                     <div className="space-y-1">
                         <label className="flex items-center justify-between text-xs font-mono text-brand-secondary uppercase tracking-widest">
                             <span className="flex items-center gap-2"><Code2 size={15} className="text-orange-400" /> LeetCode Username</span>
-                            {externalStats?.lc
+                            {savedHandles.lc
                                 ? <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>
-                                : lcUsername.trim() && <span className="text-red-400/70 text-[10px] flex items-center gap-1">⚠ Not fetched — click Connect</span>
+                                : lcUsername.trim() && <span className="text-red-400/70 text-[10px] flex items-center gap-1">⚠ Not saved — click Connect</span>
                             }
                         </label>
                         <div className="flex gap-2">
                             <input value={lcUsername} onChange={e => setLcUsername(e.target.value)} placeholder="neal_wu"
                                 className="flex-1 bg-brand-bg border border-brand-border text-brand-primary font-mono text-sm px-3 py-2 rounded focus:outline-none focus:border-brand-primary/60 placeholder:text-brand-secondary/30" />
-                            <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
-                                className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
+                            {lcUsername === savedHandles.lc && savedHandles.lc !== '' ? (
+                                <button onClick={() => forceSync()} disabled={syncing}
+                                    className="px-6 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Sync</button>
+                            ) : (
+                                <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
+                                    className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
+                            )}
                         </div>
-                        {externalStats?.lc && (
+                        {savedHandles.lc ? (
                             <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">
-                                {externalStats.lc.totalSolved} Solved
-                                {externalStats.lc.easySolved > 0 && <> · Easy {externalStats.lc.easySolved} · Med {externalStats.lc.mediumSolved} · Hard {externalStats.lc.hardSolved}</>}
-                                {externalStats.lc.ranking > 0 && <> · Rank #{externalStats.lc.ranking.toLocaleString()}</>}
+                                {externalStats?.lc ? (
+                                    <>
+                                        {externalStats.lc.totalSolved} Solved
+                                        {externalStats.lc.easySolved > 0 && <> · Easy {externalStats.lc.easySolved} · Med {externalStats.lc.mediumSolved} · Hard {externalStats.lc.hardSolved}</>}
+                                        {externalStats.lc.ranking > 0 && <> · Rank #{externalStats.lc.ranking.toLocaleString()}</>}
+                                    </>
+                                ) : 'Connected. Awaiting stats sync...'}
+                            </div>
+                        ) : lcUsername.trim() && (
+                            <div className="text-xs font-mono text-brand-secondary/50 mt-1 ml-1">
+                                Handle typed. Click Connect to verify and fetch rating.
                             </div>
                         )}
                     </div>
@@ -222,26 +251,39 @@ export const Profile: React.FC = () => {
                     <div className="space-y-1">
                         <label className="flex items-center justify-between text-xs font-mono text-brand-secondary uppercase tracking-widest">
                             <span className="flex items-center gap-2"><Github size={15} className="text-blue-400" /> GitHub Username</span>
-                            {externalStats?.gh
+                            {savedHandles.gh
                                 ? <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>
-                                : ghUsername.trim() && <span className="text-red-400/70 text-[10px] flex items-center gap-1">⚠ Not fetched — click Connect</span>
+                                : ghUsername.trim() && <span className="text-red-400/70 text-[10px] flex items-center gap-1">⚠ Not saved — click Connect</span>
                             }
                         </label>
                         <div className="flex gap-2">
                             <input value={ghUsername} onChange={e => setGhUsername(e.target.value)} placeholder="torvalds"
                                 className="flex-1 bg-brand-bg border border-brand-border text-brand-primary font-mono text-sm px-3 py-2 rounded focus:outline-none focus:border-brand-primary/60 placeholder:text-brand-secondary/30" />
-                            <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
-                                className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
+                            {ghUsername === savedHandles.gh && savedHandles.gh !== '' ? (
+                                <button onClick={() => forceSync()} disabled={syncing}
+                                    className="px-6 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Sync</button>
+                            ) : (
+                                <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
+                                    className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
+                            )}
                         </div>
-                        {externalStats?.gh && (
+                        {savedHandles.gh ? (
                             <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">
-                                {externalStats.gh.publicRepos} Repos
-                                {externalStats.gh.totalCommitsEstimate > 0
-                                    ? <> · {externalStats.gh.totalCommitsEstimate} Commits (90d)</>
-                                    : externalStats.gh.lastMonthCommits > 0
-                                        ? <> · {externalStats.gh.lastMonthCommits} Commits (30d)</>
-                                        : <> · No recent public commits</>}
-                                {externalStats.gh.followers > 0 && <> · {externalStats.gh.followers} Followers</>}
+                                {externalStats?.gh ? (
+                                    <>
+                                        {externalStats.gh.publicRepos} Repos
+                                        {externalStats.gh.totalCommitsEstimate > 0
+                                            ? <> · {externalStats.gh.totalCommitsEstimate} Commits (90d)</>
+                                            : externalStats.gh.lastMonthCommits > 0
+                                                ? <> · {externalStats.gh.lastMonthCommits} Commits (30d)</>
+                                                : <> · No recent public commits</>}
+                                        {externalStats.gh.followers > 0 && <> · {externalStats.gh.followers} Followers</>}
+                                    </>
+                                ) : 'Connected. Awaiting stats sync...'}
+                            </div>
+                        ) : ghUsername.trim() && (
+                            <div className="text-xs font-mono text-brand-secondary/50 mt-1 ml-1">
+                                Handle typed. Click Connect to verify and fetch rating.
                             </div>
                         )}
                     </div>
