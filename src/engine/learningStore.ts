@@ -1,4 +1,4 @@
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useState } from 'react';
 import { initialRoadmap } from '../data/roadmapData';
 import { initialStatistics } from '../data/statisticsData';
 import type { RoadmapCategory, StudySession, ActivityHistory, Statistics, MicroTask } from '../types';
@@ -6,7 +6,8 @@ import { logSessionToHistory, getTodayDateString } from './consistencyEngine';
 import { applySessionToRoadmap } from './progressEngine';
 import { syncSession, syncMicroTask, syncRoadmapTopic, syncActivityLog } from './syncEngine';
 import { useAuth } from '../auth/AuthContext';
-import type { ExternalStats } from './externalSyncEngine';
+import { initialTimetable } from '../data/timetableData';
+import type { DailyTimetable } from '../types';
 import type { GroqTopicAnalysis } from '../ai/groqAnalyticsEngine';
 import type { GroqQuestionSuggestions } from '../ai/groqQuestionEngine';
 import type { GroqDailyPlan } from '../ai/groqPlannerEngine';
@@ -26,19 +27,6 @@ export function useStore() {
     return useLearningStore(user?.id || 'local');
 }
 
-// ─── V3 Storage Keys (user-scoped) ───────────────────────────────────────────
-function getKeys(userId: string) {
-    const uid = userId || 'local';
-    return {
-        roadmap: `devtrack_roadmap_v3_${uid}`,
-        sessions: `devtrack_sessions_v3_${uid}`,
-        stats: `devtrack_stats_v3_${uid}`,
-        activity: `devtrack_activity_v3_${uid}`,
-        aiRec: `devtrack_ai_v3_${uid}`,
-        external: `devtrack_external_${uid}`,
-        aiAnalytics: `devtrack_aianalytics_${uid}`,
-    };
-}
 
 export interface AIRecommendation {
     topic: string;
@@ -53,15 +41,15 @@ export interface AIRecommendation {
 // NOTE: By the time this hook mounts, AuthContext has already hydrated localStorage
 // from Supabase via loadAndHydrate(). So localStorage IS the Supabase data.
 export function useLearningStore(userId = 'local') {
-    const KEYS = getKeys(userId);
 
-    const [roadmap, setRoadmap] = useLocalStorage<RoadmapCategory[]>(KEYS.roadmap, initialRoadmap);
-    const [studySessions, setStudySessions] = useLocalStorage<StudySession[]>(KEYS.sessions, []);
-    const [activityHistory, setActivityHistory] = useLocalStorage<ActivityHistory>(KEYS.activity, {});
-    const [statistics, setStatistics] = useLocalStorage<Statistics>(KEYS.stats, initialStatistics);
-    const [aiRecommendation, setAIRecommendation] = useLocalStorage<AIRecommendation | null>(KEYS.aiRec, null);
-    const [externalStats, setExternalStats] = useLocalStorage<ExternalStats | null>(KEYS.external, null);
-    const [aiAnalytics, setAiAnalytics] = useLocalStorage<AIAnalyticsPayload | null>(KEYS.aiAnalytics, null);
+    const [roadmap, setRoadmap] = useState<RoadmapCategory[]>(initialRoadmap);
+    const [studySessions, setStudySessions] = useState<StudySession[]>([]);
+    const [activityHistory, setActivityHistory] = useState<ActivityHistory>({});
+    const [statistics, setStatistics] = useState<Statistics>(initialStatistics);
+    const [aiRecommendation, setAIRecommendation] = useState<AIRecommendation | null>(null);
+    const [externalStats, setExternalStats] = useState<any | null>(null);
+    const [aiAnalytics, setAiAnalytics] = useState<AIAnalyticsPayload | null>(null);
+    const [timetable, setTimetable] = useState<DailyTimetable[]>(initialTimetable);
 
     // ── ACTION: Add Study Session ──────────────────────────────────────────────
     // Writes to localStorage immediately, then syncs to Supabase
@@ -198,8 +186,8 @@ export function useLearningStore(userId = 'local') {
     };
 
     return {
-        roadmap, studySessions, activityHistory, statistics, aiRecommendation, externalStats, aiAnalytics,
+        roadmap, studySessions, activityHistory, statistics, aiRecommendation, externalStats, aiAnalytics, timetable,
         addStudySession, completeMicroTask, updateTopicProgress, storeAIRecommendation, clearStore,
-        setRoadmap, setStatistics, setActivityHistory, setExternalStats, setAiAnalytics
+        setRoadmap, setStatistics, setActivityHistory, setExternalStats, setAiAnalytics, setTimetable, setAIRecommendation, setStudySessions
     };
 }

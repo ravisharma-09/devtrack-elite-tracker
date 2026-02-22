@@ -164,6 +164,10 @@ returns trigger as $$
 begin
   insert into public.users (id, email, name)
   values (new.id, new.email, coalesce(new.raw_user_meta_data->>'name', 'Dev'));
+  
+  insert into public.profiles (id, email, username)
+  values (new.id, new.email, coalesce(new.raw_user_meta_data->>'name', 'Dev'));
+  
   return new;
 end;
 $$ language plpgsql security definer;
@@ -288,3 +292,85 @@ create index if not exists external_activity_user_time on public.external_activi
 alter table public.external_activity enable row level security;
 drop policy if exists "Users can CRUD own external activity" on public.external_activity;
 create policy "Users can CRUD own external activity" on public.external_activity for all using (auth.uid() = user_id);
+
+-- ════════════════════════════════════════════════════
+-- TELEMETRY SYSTEM OVERHAUL TABLES
+-- ════════════════════════════════════════════════════
+
+-- PROFILES (Unified user data)
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null,
+  username text not null,
+  cf_handle text,
+  leetcode_handle text,
+  github_username text,
+  skill_score integer default 0,
+  problems_solved integer default 0,
+  cf_rating integer default 0,
+  consistency_score integer default 0,
+  study_minutes integer default 0,
+  strong_topics jsonb default '[]',
+  weak_topics jsonb default '[]',
+  current_level text,
+  created_at timestamptz default now()
+);
+alter table public.profiles enable row level security;
+create policy "Users can view own telemetry profile" on public.profiles for select using (auth.uid() = id);
+create policy "Users can update own telemetry profile" on public.profiles for update using (auth.uid() = id);
+create policy "Users can insert own telemetry profile" on public.profiles for insert with check (auth.uid() = id);
+
+-- ACTIVITIES (Unified activity stream)
+create table if not exists public.activities (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  source text not null, -- codeforces | lc | github | devtrack
+  type text not null,   -- solve | contest | commit | study
+  title text not null,
+  topic text,
+  difficulty text,
+  rating integer default 0,
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+alter table public.activities enable row level security;
+create policy "Users can CRUD own activities" on public.activities for all using (auth.uid() = user_id);
+
+-- PROBLEM ATTEMPTS
+create table if not exists public.problem_attempts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  platform text not null,  -- codeforces, leetcode, etc.
+  problem_id text not null,
+  name text not null,
+  topic text,
+  rating integer default 0,
+  verdict text not null,
+  created_at timestamptz default now()
+);
+alter table public.problem_attempts enable row level security;
+create policy "Users can CRUD own problem attempts" on public.problem_attempts for all using (auth.uid() = user_id);
+
+
+
+-- USER TIMETABLE (Weekly schedule state)
+create table if not exists public.user_timetable (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  schedule jsonb not null default '[]',
+  updated_at timestamptz default now()
+);
+alter table public.user_timetable enable row level security;
+create policy "Users can CRUD own timetable" on public.user_timetable for all using (auth.uid() = user_id);
+
+create table if not exists public.recommendations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  type text not null, -- dsa | web | open_source
+  content jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+alter table public.recommendations enable row level security;
+drop policy if exists "Users can CRUD own recommendations" on public.recommendations;
+create policy "Users can CRUD own recommendations" on public.recommendations for all using (auth.uid() = user_id);
+

@@ -1,0 +1,284 @@
+[
+    {
+        "name": "Watermelon",
+        "link": "https://codeforces.com/problemset/problem/4/A",
+        "topic": "Math",
+        "rating": 800
+    },
+    {
+        "name": "Way Too Long Words",
+        "link": "https://codeforces.com/problemset/problem/71/A",
+        "topic": "Strings",
+        "rating": 800
+    },
+    {
+        "name": "Team",
+        "link": "https://codeforces.com/problemset/problem/231/A",
+        "topic": "Greedy",
+        "rating": 800
+    },
+    {
+        "name": "Next Round",
+        "link": "https://codeforces.com/problemset/problem/158/A",
+        "topic": "Implementation",
+        "rating": 800
+    },
+    {
+        "name": "Bit++",
+        "link": "https://codeforces.com/problemset/problem/282/A",
+        "topic": "Implementation",
+        "rating": 800
+    },
+    {
+        "name": "Domino piling",
+        "link": "https://codeforces.com/problemset/problem/50/A",
+        "topic": "Math",
+        "rating": 800
+    },
+    {
+        "name": "Beautiful Matrix",
+        "link": "https://codeforces.com/problemset/problem/263/A",
+        "topic": "Math",
+        "rating": 800
+    },
+    {
+        "name": "Petya and Strings",
+        "link": "https://codeforces.com/problemset/problem/112/A",
+        "topic": "Strings",
+        "rating": 800
+    },
+    {
+        "name": "Helpful Maths",
+        "link": "https://codeforces.com/problemset/problem/339/A",
+        "topic": "Sorting",
+        "rating": 800
+    },
+    {
+        "name": "Word Capitalization",
+        "link": "https://codeforces.com/problemset/problem/281/A",
+        "topic": "Strings",
+        "rating": 800
+    },
+    {
+        "name": "Boy or Girl",
+        "link": "https://codeforces.com/problemset/problem/236/A",
+        "topic": "Strings",
+        "rating": 800
+    },
+    {
+        "name": "Stones on the Table",
+        "link": "https://codeforces.com/problemset/problem/266/A",
+        "topic": "Implementation",
+        "rating": 800
+    },
+    {
+        "name": "Bear and Big Brother",
+        "link": "https://codeforces.com/problemset/problem/791/A",
+        "topic": "Implementation",
+        "rating": 800
+    },
+    {
+        "name": "Elephant",
+        "link": "https://codeforces.com/problemset/problem/617/A",
+        "topic": "Math",
+        "rating": 800
+    },
+    {
+        "name": "Word",
+        "link": "https://codeforces.com/problemset/problem/59/A",
+        "topic": "Strings",
+        "rating": 800
+    },
+    {
+        "name": "Wrong Subtraction",
+        "link": "https://codeforces.com/problemset/problem/977/A",
+        "topic": "Math",
+        "rating": 800
+    },
+    {
+        "name": "Nearly Lucky Number",
+        "link": "https://codeforces.com/problemset/problem/110/A",
+        "topic": "Implementation",
+        "rating": 800
+    },
+    {
+        "name": "Anton and Danik",
+        "link": "https://codeforces.com/problemset/problem/734/A",
+        "topic": "Strings",
+        "rating": 800
+    },
+    {
+        "name": "Translation",
+        "link": "https://codeforces.com/problemset/problem/41/A",
+        "topic": "Strings",
+        "rating": 800
+    },
+    {
+        "name": "Chat room",
+        "link": "https://codeforces.com/problemset/problem/58/A",
+        "topic": "Strings",
+        "rating": 1000
+    },
+    {
+        "name": "Lucky Division",
+        "link": "https://codeforces.com/problemset/problem/122/A",
+        "topic": "Math",
+        "rating": 1000
+    },
+    {
+        "name": "Twins",
+        "link": "https://codeforces.com/problemset/problem/160/A",
+        "topic": "Sorting",
+        "rating": 900
+    },
+    {
+        "name": "Expression",
+        "link": "https://codeforces.com/problemset/problem/479/A",
+        "topic": "Math",
+        "rating": 1000
+    },
+    {
+        "name": "String Task",
+        "link": "https://codeforces.com/problemset/problem/118/A",
+        "topic": "Strings",
+        "rating": 1000
+    },
+    {
+        "name": "Young Physicist",
+        "link": "https://codeforces.com/problemset/problem/69/A",
+        "topic": "Math",
+        "rating": 1000
+    },
+    {
+        "name": "Theatre Square",
+        "link": "https://codeforces.com/problemset/problem/1/A",
+        "topic": "Math",
+        "rating": 1000
+    },
+    {
+        "name": "cAPS lOCK",
+        "link": "https://codeforces.com/problemset/problem/131/A",
+        "topic": "Strings",
+        "rating": 1000
+    },
+    {
+        "name": "Taxi",
+        "link": "https://codeforces.com/problemset/problem/158/B",
+        "topic": "Greedy",
+        "rating": 1100
+    },
+    {
+        "name": "Registration system",
+        "link": "https://codeforces.com/problemset/problem/4/C",
+        "topic": "Data Structures",
+        "rating": 1300
+    },
+    {
+        "name": "IQ test",
+        "link": "https://codeforces.com/problemset/problem/25/A",
+        "topic": "Math",
+        "rating": 1300
+    },
+    {
+        "name": "Cut Ribbon",
+        "link": "https://codeforces.com/problemset/problem/189/A",
+        "topic": "DP",
+        "rating": 1300
+    },
+    {
+        "name": "Vanya and Lanterns",
+        "link": "https://codeforces.com/problemset/problem/492/B",
+        "topic": "Sorting",
+        "rating": 1200
+    },
+    {
+        "name": "Interesting drink",
+        "link": "https://codeforces.com/problemset/problem/706/B",
+        "topic": "Binary Search",
+        "rating": 1100
+    },
+    {
+        "name": "Puzzles",
+        "link": "https://codeforces.com/problemset/problem/337/A",
+        "topic": "Greedy",
+        "rating": 900
+    },
+    {
+        "name": "Kefa and First Steps",
+        "link": "https://codeforces.com/problemset/problem/580/A",
+        "topic": "DP",
+        "rating": 900
+    },
+    {
+        "name": "Ilya and Bank Account",
+        "link": "https://codeforces.com/problemset/problem/313/A",
+        "topic": "Implementation",
+        "rating": 900
+    },
+    {
+        "name": "Dragons",
+        "link": "https://codeforces.com/problemset/problem/230/A",
+        "topic": "Sorting",
+        "rating": 1000
+    },
+    {
+        "name": "Kefa and Park",
+        "link": "https://codeforces.com/problemset/problem/580/C",
+        "topic": "Trees",
+        "rating": 1500
+    },
+    {
+        "name": "Given Length and Sum of Digits...",
+        "link": "https://codeforces.com/problemset/problem/489/C",
+        "topic": "Greedy",
+        "rating": 1400
+    },
+    {
+        "name": "Boredom",
+        "link": "https://codeforces.com/problemset/problem/455/A",
+        "topic": "DP",
+        "rating": 1500
+    },
+    {
+        "name": "Two Buttons",
+        "link": "https://codeforces.com/problemset/problem/520/B",
+        "topic": "Graphs",
+        "rating": 1400
+    },
+    {
+        "name": "Maze",
+        "link": "https://codeforces.com/problemset/problem/377/A",
+        "topic": "DFS",
+        "rating": 1600
+    },
+    {
+        "name": "Dijkstra?",
+        "link": "https://codeforces.com/problemset/problem/20/C",
+        "topic": "Shortest Paths",
+        "rating": 1900
+    },
+    {
+        "name": "Woodcutters",
+        "link": "https://codeforces.com/problemset/problem/545/C",
+        "topic": "DP",
+        "rating": 1500
+    },
+    {
+        "name": "Maximum Absurdity",
+        "link": "https://codeforces.com/problemset/problem/332/B",
+        "topic": "DP",
+        "rating": 1700
+    },
+    {
+        "name": "Validating Strings",
+        "link": "https://codeforces.com/problemset/problem/XXX/X",
+        "topic": "Two Pointers",
+        "rating": 1500
+    },
+    {
+        "name": "Number of Ways",
+        "link": "https://codeforces.com/problemset/problem/466/C",
+        "topic": "Two Pointers",
+        "rating": 1700
+    }
+]

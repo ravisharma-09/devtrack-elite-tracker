@@ -26,19 +26,8 @@ interface Handles {
     github_username: string;
 }
 
-const CACHE_KEY = (uid: string) => `devtrack_external_${uid}`;
-const HANDLES_KEY = (uid: string) => `devtrack_handles_${uid}`;
-
 // ─── Load all external stats (localStorage cache first, then Supabase) ────────
 export async function loadExternalStats(userId: string): Promise<ExternalStats> {
-    try {
-        const cached = localStorage.getItem(CACHE_KEY(userId));
-        if (cached) {
-            const parsed: ExternalStats = JSON.parse(cached);
-            if (!isStale(parsed.lastSynced ?? 0)) return parsed;
-        }
-    } catch { }
-
     const supabase = await getSupabaseClient();
     if (!supabase) return { cf: null, lc: null, gh: null, lastSynced: null };
 
@@ -59,7 +48,6 @@ export async function loadExternalStats(userId: string): Promise<ExternalStats> 
         }
     } catch { }
 
-    try { localStorage.setItem(CACHE_KEY(userId), JSON.stringify(result)); } catch { }
     return result;
 }
 
@@ -67,31 +55,21 @@ export async function loadExternalStats(userId: string): Promise<ExternalStats> 
 export async function loadUserHandles(userId: string): Promise<Handles> {
     const empty: Handles = { codeforces_handle: '', leetcode_username: '', github_username: '' };
     const supabase = await getSupabaseClient();
+    if (!supabase) return empty;
 
-    if (supabase) {
-        try {
-            const { data, error } = await supabase
-                .from('users')
-                .select('codeforces_handle, leetcode_username, github_username')
-                .eq('id', userId)
-                .single();
-            if (!error && data) {
-                const fromDB = {
-                    codeforces_handle: data.codeforces_handle ?? '',
-                    leetcode_username: data.leetcode_username ?? '',
-                    github_username: data.github_username ?? '',
-                };
-                // Also cache locally
-                try { localStorage.setItem(HANDLES_KEY(userId), JSON.stringify(fromDB)); } catch { }
-                return fromDB;
-            }
-        } catch { }
-    }
-
-    // Fallback: localStorage (handles saved from Profile even if DB columns missing)
     try {
-        const local = localStorage.getItem(HANDLES_KEY(userId));
-        if (local) return JSON.parse(local);
+        const { data, error } = await supabase
+            .from('users')
+            .select('codeforces_handle, leetcode_username, github_username')
+            .eq('id', userId)
+            .single();
+        if (!error && data) {
+            return {
+                codeforces_handle: data.codeforces_handle ?? '',
+                leetcode_username: data.leetcode_username ?? '',
+                github_username: data.github_username ?? '',
+            };
+        }
     } catch { }
 
     return empty;
@@ -99,9 +77,6 @@ export async function loadUserHandles(userId: string): Promise<Handles> {
 
 // ─── Save platform handles — uses UPSERT (row created if missing)
 export async function saveUserHandles(userId: string, handles: Handles): Promise<boolean> {
-    // Always save to localStorage first (works even if Supabase columns don't exist)
-    try { localStorage.setItem(HANDLES_KEY(userId), JSON.stringify(handles)); } catch { }
-
     const supabase = await getSupabaseClient();
     if (!supabase) return false;
 
@@ -115,7 +90,7 @@ export async function saveUserHandles(userId: string, handles: Handles): Promise
 
     if (error) {
         console.warn('[DevTrack] saveUserHandles Supabase error (schema may need update):', error.message);
-        return false; // localStorage already saved above — sync will still work
+        return false;
     }
     return true;
 }
@@ -135,7 +110,7 @@ export async function syncExternalStats(
         if (!isStale(existing.lastSynced ?? 0)) return existing;
     }
 
-    // Resolve handles: overrides > Supabase/localStorage
+    // Resolve handles: overrides > Supabase
     let handles: Handles;
     if (handleOverrides && (handleOverrides.codeforces_handle !== undefined || handleOverrides.leetcode_username !== undefined || handleOverrides.github_username !== undefined)) {
         handles = {
@@ -184,7 +159,6 @@ export async function syncExternalStats(
     }
 
     const result: ExternalStats = { cf, lc, gh, lastSynced: Date.now() };
-    try { localStorage.setItem(CACHE_KEY(userId), JSON.stringify(result)); } catch { }
     return result;
 }
 

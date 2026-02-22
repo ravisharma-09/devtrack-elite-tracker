@@ -15,17 +15,6 @@ async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promis
     }
 }
 
-// ─── Storage key helpers (mirrors learningStore) ──────────────────────────────
-function getKeys(uid: string) {
-    return {
-        roadmap: `devtrack_roadmap_v3_${uid}`,
-        sessions: `devtrack_sessions_v3_${uid}`,
-        stats: `devtrack_stats_v3_${uid}`,
-        activity: `devtrack_activity_v3_${uid}`,
-        aiRec: `devtrack_ai_v3_${uid}`,
-    };
-}
-
 // ─── Hydrate roadmap from DB records ─────────────────────────────────────────
 function buildHydratedRoadmap(
     roadmapProgress: any[],
@@ -119,14 +108,6 @@ export async function loadAndHydrate(userId: string): Promise<boolean> {
         });
 
         const roadmap = buildHydratedRoadmap(roadmapRes.data || [], microRes.data || []);
-        const stats = buildStatistics(sessions, roadmap);
-
-        // Write to user-scoped localStorage — learningStore will read from here
-        const KEYS = getKeys(userId);
-        localStorage.setItem(KEYS.sessions, JSON.stringify(sessions));
-        localStorage.setItem(KEYS.activity, JSON.stringify(activityLog));
-        localStorage.setItem(KEYS.roadmap, JSON.stringify(roadmap));
-        localStorage.setItem(KEYS.stats, JSON.stringify(stats));
 
         return true;
     } catch (e) {
@@ -185,4 +166,141 @@ export async function syncRoadmapTopic(categoryId: string, topicId: string, prog
         });
         if (error) throw error;
     });
+}
+
+// ─── Sync Timetable ────────────────────────────────────────────────────────
+export async function syncTimetable(schedule: any, userId = 'local'): Promise<void> {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    await withRetry(async () => {
+        const { error } = await supabase.from('user_timetable').upsert({
+            user_id: userId, schedule
+        });
+        if (error) throw error;
+    });
+}
+
+// ─── PHASE 2: TELEMETRY SYNC ENGINE ──────────────────────────────────────────
+export async function runTelemetrySync(userId: string): Promise<void> {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+
+    try {
+        // 1. Get user handles
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('cf_handle, leetcode_handle, github_username, problems_solved')
+            .eq('id', userId)
+            .single();
+
+        if (!profile) return;
+
+        let totalProblemsSolved = profile.problems_solved || 0;
+        let cfRating = 0;
+
+        // ─── Codeforces Sync ───
+        if (profile.cf_handle) {
+            const cfStatusUrl = `https://codeforces.com/api/user.status?handle=${encodeURIComponent(profile.cf_handle)}&from=1&count=100`;
+            const cfInfoUrl = `https://codeforces.com/api/user.info?handles=${encodeURIComponent(profile.cf_handle)}`;
+
+            const [statusRes, infoRes] = await Promise.all([fetch(cfStatusUrl), fetch(cfInfoUrl)]);
+
+            if (infoRes.ok) {
+                const infoData = await infoRes.json();
+                if (infoData.status === 'OK' && infoData.result.length > 0) {
+                    cfRating = infoData.result[0].rating || 0;
+                }
+            }
+
+            if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                if (statusData.status === 'OK') {
+                    const submissions = statusData.result;
+                    const solvedSet = new Set<string>();
+
+                    for (const sub of submissions) {
+                        const probName = sub.problem.name;
+                        if (sub.verdict === 'OK') solvedSet.add(probName);
+
+                        // Insert into activities
+                        await supabase.from('activities').insert({
+                            user_id: userId,
+                            source: 'codeforces',
+                            type: sub.verdict === 'OK' ? 'solve' : 'attempt',
+                            title: probName,
+                            topic: sub.problem.tags ? sub.problem.tags[0] : 'general',
+                            difficulty: sub.problem.rating ? `Rating ${sub.problem.rating}` : 'unknown',
+                            created_at: new Date(sub.creationTimeSeconds * 1000).toISOString()
+                        }).select().maybeSingle();
+
+                        // Insert into problem_history
+                        if (sub.verdict === 'OK' && !solvedSet.has(probName + "_logged")) {
+                            await supabase.from('problem_history').insert({
+                                user_id: userId,
+                                platform: 'codeforces',
+                                problem_name: probName,
+                                topic: sub.problem.tags ? sub.problem.tags.join(', ') : 'general',
+                                difficulty: sub.problem.rating ? `Rating ${sub.problem.rating}` : 'unknown',
+                                solved: true,
+                                created_at: new Date(sub.creationTimeSeconds * 1000).toISOString()
+                            }).select().maybeSingle();
+                            solvedSet.add(probName + "_logged");
+                        }
+                    }
+                    totalProblemsSolved += solvedSet.size;
+                }
+            }
+        }
+
+        // ─── LeetCode Sync ───
+        if (profile.leetcode_handle) {
+            const lcRes = await fetch(`https://leetcode-stats-api.herokuapp.com/${encodeURIComponent(profile.leetcode_handle)}`);
+            if (lcRes.ok) {
+                const lcData = await lcRes.json();
+                if (lcData.status === 'success') {
+                    totalProblemsSolved += lcData.totalSolved || 0;
+
+                    // Log an aggregate entry to problem_history as per instructions
+                    await supabase.from('problem_history').insert({
+                        user_id: userId,
+                        platform: 'leetcode',
+                        problem_name: 'LeetCode Aggregate Sync',
+                        topic: 'mixed',
+                        difficulty: `Easy: ${lcData.easySolved}, Med: ${lcData.mediumSolved}, Hard: ${lcData.hardSolved}`,
+                        solved: true
+                    }).select().maybeSingle();
+                }
+            }
+        }
+
+        // ─── GitHub Sync ───
+        if (profile.github_username) {
+            const ghRes = await fetch(`https://api.github.com/users/${encodeURIComponent(profile.github_username)}/events/public?per_page=30`);
+            if (ghRes.ok) {
+                const ghData = await ghRes.json();
+                for (const ev of ghData) {
+                    if (ev.type === 'PushEvent') {
+                        await supabase.from('activities').insert({
+                            user_id: userId,
+                            source: 'github',
+                            type: 'commit',
+                            title: `Push to ${ev.repo.name}`,
+                            topic: 'development',
+                            difficulty: 'N/A',
+                            created_at: new Date(ev.created_at).toISOString()
+                        }).select().maybeSingle();
+                    }
+                }
+            }
+        }
+
+        // ─── Update Profile ───
+        await supabase.from('profiles').update({
+            cf_rating: cfRating,
+            problems_solved: totalProblemsSolved,
+        }).eq('id', userId);
+
+    } catch (e) {
+        console.error('[DevTrack] Telemetry sync failed', e);
+    }
 }

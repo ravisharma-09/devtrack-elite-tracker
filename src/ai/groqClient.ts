@@ -1,5 +1,4 @@
-export const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-export const AI_MODEL = "llama3-70b-8192";
+
 
 export interface GroqMessage {
     role: "system" | "user" | "assistant";

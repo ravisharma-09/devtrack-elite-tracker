@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useStore } from '../engine/learningStore';
 import { calculatePlayerLevel } from '../data/statisticsData';
 import { calculateConsistencyScore, calculateStreak } from '../engine/consistencyEngine';
-import { extractLearningAnalytics } from '../engine/aiSuggestionEngine';
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
 import { syncExternalStats } from '../engine/externalSyncEngine';
 import { computeSkillProfile } from '../engine/analyticsEngine';
@@ -17,6 +16,52 @@ export const Statistics: React.FC = () => {
     const { user } = useAuth();
     const { roadmap, studySessions, activityHistory, statistics, externalStats, setExternalStats, aiAnalytics } = useStore();
     const [syncing, setSyncing] = useState(false);
+    const [velocityData, setVelocityData] = useState<{ date: string; solved: number }[]>([]);
+
+    useEffect(() => {
+        if (!user) return;
+        let mounted = true;
+
+        const fetchVelocity = async () => {
+            const { getSupabaseClient } = await import('../backend/supabaseClient');
+            const supabase = await getSupabaseClient();
+            if (!supabase) return;
+
+            // Fetch last 7 days of problem
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+            const { data } = await supabase
+                .from('problem_history')
+                .select('created_at, solved')
+                .eq('user_id', user.id)
+                .gte('created_at', sevenDaysAgo.toISOString());
+
+            if (mounted && data) {
+                // Group by day string
+                const counts: Record<string, number> = {};
+                for (let i = 6; i >= 0; i--) {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    counts[d.toLocaleDateString('en', { weekday: 'short' })] = 0;
+                }
+
+                data.forEach((row: any) => {
+                    if (row.solved) {
+                        const dStr = new Date(row.created_at).toLocaleDateString('en', { weekday: 'short' });
+                        if (counts[dStr] !== undefined) {
+                            counts[dStr]++;
+                        }
+                    }
+                });
+
+                const formatted = Object.entries(counts).map(([date, solved]) => ({ date, solved }));
+                setVelocityData(formatted);
+            }
+        };
+
+        fetchVelocity();
+    }, [user]);
 
     const ext = externalStats || { cf: null, lc: null, gh: null, lastSynced: null };
 
@@ -30,7 +75,20 @@ export const Statistics: React.FC = () => {
         finally { setSyncing(false); }
     };
 
-    const analytics = extractLearningAnalytics(roadmap, studySessions, activityHistory);
+    let totalTopics = 0, completedTopics = 0, totalMicroTasks = 0, completedMicroTasks = 0;
+    roadmap.forEach(cat => cat.topics.forEach(t => {
+        totalTopics++;
+        if (t.completed) completedTopics++;
+        if (t.tasks) {
+            totalMicroTasks += t.tasks.length;
+            completedMicroTasks += (t.tasks as any[]).filter(mt => mt.completed).length;
+        }
+    }));
+    const analytics = {
+        totalTopics, completedTopics, totalMicroTasks, completedMicroTasks,
+        velocityTrend: 'accelerating' as 'accelerating' | 'declining' | 'flat'
+    };
+
     const liveStreak = calculateStreak(activityHistory);
     const consistencyScore = calculateConsistencyScore(activityHistory);
     const skill = computeSkillProfile(roadmap, studySessions, activityHistory, ext.cf, ext.lc, ext.gh);
@@ -43,25 +101,17 @@ export const Statistics: React.FC = () => {
     const level = calculatePlayerLevel(roadmapPct);
     const formatHours = (m: number) => m >= 60 ? `${(m / 60).toFixed(1)}h` : `${m}m`;
 
-
-
     const VelocityIcon = analytics.velocityTrend === 'accelerating' ? TrendingUp
         : analytics.velocityTrend === 'declining' ? TrendingDown : Minus;
     const velocityColor = analytics.velocityTrend === 'accelerating' ? 'text-brand-primary'
         : analytics.velocityTrend === 'declining' ? 'text-red-400' : 'text-brand-accent';
 
     // Simulated Skill Growth History (Line Chart) 
-    // In a production environment, this would cleanly pull from the public.skill_history table
-    // For now, we simulate the last 7 days leading up to the current skill.overallScore
     const skillHistoryData = Array.from({ length: 7 }, (_, i) => {
         const date = new Date();
         date.setDate(date.getDate() - (6 - i));
-        // linear progression mimicking steady growth ending at current score
         const progressionScore = Math.max(0, skill.overallScore - ((6 - i) * 2));
-        return {
-            name: date.toLocaleDateString('en', { weekday: 'short' }),
-            Score: progressionScore
-        };
+        return { name: date.toLocaleDateString('en', { weekday: 'short' }), Score: progressionScore };
     });
 
     return (
@@ -171,16 +221,16 @@ export const Statistics: React.FC = () => {
                 </h3>
                 <div className="h-56 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={skill.velocityHistory.slice().reverse()} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                        <BarChart data={velocityData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#2D3748" vertical={false} />
-                            <XAxis dataKey="week" stroke="#718096" fontSize={11} tickLine={false} axisLine={false} />
+                            <XAxis dataKey="date" stroke="#718096" fontSize={11} tickLine={false} axisLine={false} />
                             <YAxis stroke="#718096" fontSize={11} tickLine={false} axisLine={false} />
                             <RechartsTooltip
                                 cursor={{ fill: '#2D3748', opacity: 0.4 }}
                                 contentStyle={{ backgroundColor: '#1A202C', borderColor: '#2D3748', borderRadius: '4px', fontSize: '12px' }}
                                 itemStyle={{ color: '#FCD34D' }}
                             />
-                            <Bar dataKey="problemsSolved" fill="#FCD34D" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                            <Bar dataKey="solved" fill="#FCD34D" radius={[4, 4, 0, 0]} maxBarSize={50} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>

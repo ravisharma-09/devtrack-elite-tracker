@@ -1,100 +1,114 @@
 import React, { useEffect, useState } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { initialTimetable } from '../data/timetableData';
 import { useStore } from '../engine/learningStore';
 import { useAuth } from '../auth/AuthContext';
 import { AddStudySessionModal } from '../components/AddStudySessionModal';
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
-import { syncAIAnalytics } from '../engine/aiSyncEngine';
-import { computeSkillProfile } from '../engine/analyticsEngine';
-import { fetchUnifiedActivityFeed, type ExternalActivity } from '../engine/externalActivityEngine';
-import { getTodayStats, calculateConsistencyScore } from '../engine/consistencyEngine';
-import { updateLeaderboardStats } from '../engine/leaderboardEngine';
+import { getSupabaseClient } from '../backend/supabaseClient';
 import { Link } from 'react-router-dom';
-import type { DailyTimetable } from '../types';
 import { Brain, Clock, PlusCircle, Target, Flame, TrendingUp, Zap, Activity as ActivityIcon } from 'lucide-react';
-
 export const Dashboard: React.FC = () => {
-    const [timetable] = useLocalStorage<DailyTimetable[]>('devtrack_timetable', initialTimetable);
     const { user } = useAuth();
     const {
-        roadmap, studySessions, activityHistory, statistics, externalStats,
-        aiAnalytics, setAiAnalytics, addStudySession,
+        roadmap, activityHistory, aiAnalytics, timetable, addStudySession, setAiAnalytics
     } = useStore();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isLoadingAI, setIsLoadingAI] = useState(false);
-    const [recentActivities, setRecentActivities] = useState<ExternalActivity[]>([]);
+    const [recentActivities, setRecentActivities] = useState<any[]>([]);
+    const [profile, setProfile] = useState<any>(null);
+    const [todayStudyMinutes, setTodayStudyMinutes] = useState(0);
 
     const currentDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
-    const todayTasks = timetable[currentDayIndex]?.tasks || [];
-    const todayDone = todayTasks.filter(t => t.completed).length;
+    const todayTasks = (timetable[currentDayIndex]?.tasks || []) as any[];
+    const todayDone = todayTasks.filter((t: any) => t.completed).length;
     const todayProgress = todayTasks.length > 0 ? Math.round((todayDone / todayTasks.length) * 100) : 0;
 
-    const consistencyScore = calculateConsistencyScore(activityHistory);
-    const todayStats = getTodayStats(activityHistory);
-
-    // Fallback dummy profile for initial empty states
-    const skill = computeSkillProfile(roadmap, studySessions, activityHistory, externalStats?.cf || null, externalStats?.lc || null, externalStats?.gh || null);
-
     useEffect(() => {
-        const extTime = externalStats?.lastSynced || 0;
-        const aiTime = aiAnalytics?.lastUpdated || 0;
-        const isStale = Date.now() - aiTime > 3600000; // refresh UI aggressively if cache logic fails
-        const needsExternalUpdate = extTime > aiTime;
+        if (!user) return;
+        let mounted = true;
 
-        const shouldFetch = !aiAnalytics || isStale || needsExternalUpdate;
-        if (!shouldFetch) return;
+        const fetchData = async () => {
+            const supabase = await getSupabaseClient();
+            if (!supabase) return;
 
-        syncAIAnalytics(user?.id || 'local', skill, roadmap, activityHistory, studySessions, aiAnalytics, needsExternalUpdate)
-            .then((payload: any) => {
-                if (payload) setAiAnalytics(payload);
-            })
-            .catch(() => { })
-            .finally(() => setIsLoadingAI(false));
-    }, [externalStats?.lastSynced]); // eslint-disable-line react-hooks/exhaustive-deps
+            // Fetch Profiles
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
 
-    // ── Leaderboard Auto-Sync ─────────────────────────────────────────────────
-    useEffect(() => {
-        if (!user || user.id === 'local') return;
+            if (mounted && profileData) {
+                setProfile(profileData);
+            }
 
-        // Auto-push the computed skill profile to the global leaderboard
-        // We throttle this implicitly by only pushing when the core stats change
-        const cfRating = externalStats?.cf?.rating || 0;
-        const lcSolved = externalStats?.lc?.totalSolved || 0;
-        const ghScore = skill.developmentScore || 0;
-        const studyMinutes = studySessions.reduce((a, s) => a + (s.durationMinutes || 0), 0);
+            // Fetch Recent Activities
+            const { data: actData } = await supabase
+                .from('activities')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(5);
 
-        updateLeaderboardStats(
-            user.id,
-            (user as any).user_metadata?.name || user.email?.split('@')[0] || 'Dev',
-            skill.overallScore,
-            skill.totalProblemsSolved,
-            studyMinutes,
-            skill.consistencyScore,
-            cfRating,
-            lcSolved,
-            ghScore
-        ).catch(console.error);
+            if (mounted && actData) {
+                setRecentActivities(actData);
 
-    }, [
-        skill.overallScore,
-        skill.totalProblemsSolved,
-        skill.consistencyScore,
-        studySessions.length,
-        externalStats?.lastSynced
-    ]);
+                // Calculate today's manual study minutes
+                const today = new Date().toISOString().split('T')[0];
+                const todayMins = actData
+                    .filter((a: any) => a.type === 'study' && a.created_at.startsWith(today))
+                    .reduce((acc: any, curr: any) => acc + (curr.score || 0), 0);
+                setTodayStudyMinutes(todayMins);
+            }
 
-    // ── External Activity Auto-Sync (View-only) ───────────────────────────────
-    useEffect(() => {
-        if (!user || user.id === 'local') return;
-        fetchUnifiedActivityFeed(user.id, 5).then(setRecentActivities).catch(() => { });
-    }, [user, externalStats?.lastSynced]);
+            // Sync AI Analytics dynamically
+            try {
+                if (mounted && profileData) {
+                    setIsLoadingAI(true);
+                    const { syncAIAnalytics } = await import('../engine/aiSyncEngine');
 
-    const totalTopics = roadmap.reduce((a, c) => a + c.topics.length, 0);
-    const completedTopics = roadmap.reduce((a, c) => a + c.topics.filter(t => t.completed).length, 0);
-    const roadmapPct = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
+                    // Transform actData to StudySession interface type implicitly mapped
+                    const mappedSessions = actData?.filter((a: any) => a.type === 'study').map((a: any) => ({
+                        id: a.id, topic: a.topic || 'General', category: a.source || 'devtrack', durationMinutes: a.score || 30, date: a.created_at, timestamp: new Date(a.created_at).getTime(), difficulty: a.difficulty || 'Medium'
+                    })) || [];
 
+                    const aiPayload = await syncAIAnalytics(user.id, profileData, roadmap, activityHistory, mappedSessions, aiAnalytics, false);
+                    if (mounted && aiPayload) {
+                        setAiAnalytics(aiPayload);
+                    }
+                    if (mounted) setIsLoadingAI(false);
+                }
+            } catch (e) {
+                console.error("AI Sync failed in Dashboard", e);
+                if (mounted) setIsLoadingAI(false);
+            }
+        };
+
+        fetchData();
+
+        getSupabaseClient().then(supabase => {
+            if (!supabase) return;
+            const sub = supabase.channel('dashboard_changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, () => {
+                    fetchData();
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'activities', filter: `user_id=eq.${user.id}` }, () => {
+                    fetchData();
+                })
+                .subscribe();
+            return () => { supabase.removeChannel(sub); };
+        });
+
+        return () => { mounted = false; };
+    }, [user]);
+
+
+    const streak = profile?.consistency_score || 0;
+    const consistencyScore = profile ? Math.min(100, Math.round((profile.consistency_score / 30) * 100)) : 0;
+
+    // Calculate Level
+    const skillScore = profile?.skill_score || 0;
+    const level = skillScore < 50 ? 'Beginner' : skillScore < 200 ? 'Intermediate' : 'Advanced';
     return (
         <div className="space-y-8 animate-fade-in pb-12">
             <header className="mb-8 border-b border-brand-border pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
@@ -110,21 +124,23 @@ export const Dashboard: React.FC = () => {
 
             {/* STATS ROW */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                    { label: 'Study Streak', value: `${statistics.studyStreakDays}d`, icon: <Flame size={18} className="text-red-400" />, color: 'text-red-400' },
-                    { label: 'Today Minutes', value: `${todayStats.minutesStudied}m`, icon: <Clock size={18} className="text-blue-400" />, color: 'text-blue-400' },
-                    { label: 'Consistency', value: `${consistencyScore}%`, icon: <TrendingUp size={18} className="text-brand-primary" />, color: 'text-brand-primary' },
-                    { label: 'Roadmap Done', value: `${roadmapPct}%`, icon: <Target size={18} className="text-brand-accent" />, color: 'text-brand-accent' },
-                ].map(stat => (
-                    <div key={stat.label} className="retro-panel p-4 flex items-center gap-3">
-                        <div className="p-2 bg-brand-bg rounded-lg border border-brand-border">{stat.icon}</div>
-                        <div>
-                            <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest">{stat.label}</div>
-                            <div className={`text-xl font-bold font-mono ${stat.color}`}>{stat.value}</div>
+                {
+                    [
+                        { label: 'Study Streak', value: `${streak}d`, icon: <Flame size={18} className="text-red-400" />, color: 'text-red-400' },
+                        { label: 'Today Minutes', value: `${todayStudyMinutes}m`, icon: <Clock size={18} className="text-blue-400" />, color: 'text-blue-400' },
+                        { label: 'Consistency', value: `${consistencyScore}%`, icon: <TrendingUp size={18} className="text-brand-primary" />, color: 'text-brand-primary' },
+                        { label: 'Skill Score', value: `${skillScore} (${level})`, icon: <Target size={18} className="text-brand-accent" />, color: 'text-brand-accent' },
+                    ].map(stat => (
+                        <div key={stat.label} className="retro-panel p-4 flex items-center gap-3">
+                            <div className="p-2 bg-brand-bg rounded-lg border border-brand-border">{stat.icon}</div>
+                            <div>
+                                <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest">{stat.label}</div>
+                                <div className={`text-xl font-bold font-mono ${stat.color}`}>{stat.value}</div>
+                            </div>
                         </div>
-                    </div>
-                ))}
-            </div>
+                    ))
+                }
+            </div >
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -147,7 +163,7 @@ export const Dashboard: React.FC = () => {
                                 "{aiAnalytics.plan.motivationalInsight}"
                             </div>
                             <ul className="space-y-3">
-                                {aiAnalytics.plan.dailyPlan.map((task, idx) => (
+                                {aiAnalytics.plan.dailyPlan.map((task: any, idx: number) => (
                                     <li key={idx} className="flex items-start gap-3 p-3 bg-brand-bg/50 border border-brand-primary/10 rounded">
                                         <Zap size={16} className="text-yellow-400 mt-0.5 flex-shrink-0" />
                                         <div className="text-brand-secondary text-sm leading-relaxed">{task}</div>
@@ -183,7 +199,7 @@ export const Dashboard: React.FC = () => {
                         </div>
                     </div>
                     <div className="space-y-2 max-h-[160px] overflow-y-auto">
-                        {todayTasks.slice(0, 6).map(task => (
+                        {todayTasks.slice(0, 6).map((task: any) => (
                             <div key={task.id} className="flex items-center gap-2 text-xs font-mono">
                                 <span className={task.completed ? 'text-brand-primary' : 'text-brand-secondary'}>
                                     {task.completed ? '✓' : '○'}
@@ -197,11 +213,11 @@ export const Dashboard: React.FC = () => {
                             <p className="text-brand-secondary text-xs font-mono">No tasks scheduled</p>
                         )}
                     </div>
-                    {todayStats.sessionsCompleted > 0 && (
+                    {todayStudyMinutes > 0 && (
                         <div className="mt-4 pt-4 border-t border-brand-border/30">
-                            <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1">Logged Today</div>
+                            <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest mb-1">Total Mins Logged</div>
                             <div className="text-brand-primary font-mono text-sm">
-                                {todayStats.sessionsCompleted} session{todayStats.sessionsCompleted !== 1 ? 's' : ''} · {todayStats.minutesStudied}m
+                                {todayStudyMinutes}m
                             </div>
                         </div>
                     )}
@@ -222,10 +238,15 @@ export const Dashboard: React.FC = () => {
                         {recentActivities.map(act => (
                             <div key={act.id} className="flex justify-between items-center bg-brand-bg/50 border border-brand-border/30 p-3 rounded">
                                 <div className="flex items-center gap-3">
-                                    <span className={`w-2 h-2 rounded-full ${act.platform === 'LeetCode' ? 'bg-orange-500' : act.platform === 'Codeforces' ? 'bg-cyan-500' : 'bg-brand-secondary'}`} />
-                                    <span className="text-xs font-mono text-brand-primary">{act.activity_title}</span>
+                                    <span className={`w-2 h-2 rounded-full ${act.source === 'leetcode' ? 'bg-orange-500' : act.source === 'codeforces' ? 'bg-cyan-500' : 'bg-brand-secondary'}`} />
+                                    <span className="text-xs font-mono text-brand-primary">
+                                        {act.type === 'solve' && `Solved ${act.metadata?.title || 'a problem'}`}
+                                        {act.type === 'commit' && `Committed to ${act.metadata?.repo || 'a repository'}`}
+                                        {act.type === 'study' && `Studied ${act.metadata?.topic || 'a topic'}`}
+                                        {act.type === 'contest' && `Participated in contest`}
+                                    </span>
                                 </div>
-                                <span className="text-[10px] font-mono text-brand-secondary">{new Date(act.activity_timestamp).toLocaleDateString()}</span>
+                                <span className="text-[10px] font-mono text-brand-secondary">{new Date(act.created_at).toLocaleDateString()}</span>
                             </div>
                         ))}
                     </div>

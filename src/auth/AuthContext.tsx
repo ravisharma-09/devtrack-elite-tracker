@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { signIn, signUp, signOut, onAuthStateChange } from './authService';
 import { isSupabaseConfigured } from '../backend/supabaseClient';
-import { loadAndHydrate } from '../engine/syncEngine';
-import { syncIfStale, loadExternalStats } from '../engine/externalSyncEngine';
+import { runBackgroundSync } from '../core/backgroundSync';
 
 interface AuthUser {
     id: string;
@@ -42,22 +41,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // ── Hydrate Supabase data into localStorage for a given user ──────────────
     const hydrateUser = useCallback(async (authUser: AuthUser) => {
         setIsDataReady(false);
-        await Promise.all([
-            loadAndHydrate(authUser.id),
-            loadExternalStats(authUser.id)
-        ]);
+        try {
+            const { getSupabaseClient } = await import('../backend/supabaseClient');
+            const supabase = await getSupabaseClient();
+            if (supabase) {
+                const { data: profile } = await supabase.from('profiles').select('id').eq('id', authUser.id).maybeSingle();
+                if (!profile) {
+                    console.log('[DevTrack Auth] Healing missing profile for user...');
+                    await supabase.from('profiles').insert({
+                        id: authUser.id,
+                        email: authUser.email,
+                        username: authUser.name || 'Dev'
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('[DevTrack Auth] Profile healing failed:', e);
+        }
+        await runBackgroundSync(authUser.id);
         setIsDataReady(true);
-        // Background: fetch fresh external platform stats if stale (non-blocking)
-        syncIfStale(authUser.id);
     }, []);
 
     // ── Session restore on app load (persists across refresh) ─────────────────
     useEffect(() => {
         if (!isSupabaseConfigured) {
-            const saved = localStorage.getItem('devtrack_local_user');
-            if (saved) { try { setUser(JSON.parse(saved)); } catch { } }
             setIsLoading(false);
-            setIsDataReady(true); // Offline mode: use existing localStorage
+            setIsDataReady(true);
             return;
         }
 
@@ -107,7 +116,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await signOut();
         setUser(null);
         setIsDataReady(false);
-        localStorage.removeItem('devtrack_local_user');
     }, []);
 
     return (

@@ -1,8 +1,19 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
+import { useAuth } from '../auth/AuthContext';
+
 
 export const Layout: React.FC = () => {
+    const { user } = useAuth();
+
+    useEffect(() => {
+        if (!user || user.id === 'local') return;
+
+        // Engine syncs are now handled centrally by AuthContext via backgroundSync.ts
+        // This prevents double executions, API rate limits, and race conditions.
+    }, [user]);
+
     return (
         <div className="flex min-h-screen bg-brand-bg text-brand-primary font-jetbrains">
             <Sidebar />

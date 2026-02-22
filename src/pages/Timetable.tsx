@@ -1,19 +1,11 @@
 import React, { useState } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { initialTimetable } from '../data/timetableData';
 import { useStore } from '../engine/learningStore';
-import { useAuth } from '../auth/AuthContext';
 import { AddStudySessionModal } from '../components/AddStudySessionModal';
-import type { DailyTimetable } from '../types';
 import { CheckSquare, Square, Clock, PlusCircle, BookOpen } from 'lucide-react';
 import { getTodayDateString } from '../engine/consistencyEngine';
 
 export const Timetable: React.FC = () => {
-    const { user } = useAuth();
-    const uid = user?.id || 'local';
-    // Weekly schedule is personal planning — kept in localStorage, user-scoped
-    const [timetable, setTimetable] = useLocalStorage<DailyTimetable[]>(`devtrack_timetable_${uid}`, initialTimetable);
-    const { addStudySession, studySessions, setStatistics } = useStore();
+    const { timetable, setTimetableTaskCompleted, addStudySession, studySessions } = useStore();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const today = getTodayDateString();
@@ -24,43 +16,7 @@ export const Timetable: React.FC = () => {
     const currentDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 
     const toggleTask = (dayIndex: number, taskId: string) => {
-        let completing = false;
-        let duration = 0;
-
-        setTimetable((prev: DailyTimetable[]) => {
-            const next: DailyTimetable[] = JSON.parse(JSON.stringify(prev));
-            const task = next[dayIndex]?.tasks.find((t: any) => t.id === taskId);
-            if (task) {
-                task.completed = !task.completed;
-                completing = task.completed;
-                duration = task.durationMinutes;
-            }
-            return next;
-        });
-
-        if (completing) {
-            setStatistics(prev => {
-                const todayStr = new Date().toDateString();
-                const lastDate = prev.lastActiveDate ? new Date(prev.lastActiveDate) : null;
-                const now = new Date();
-                now.setHours(0, 0, 0, 0);
-                let newStreak = prev.studyStreakDays;
-                if (lastDate) {
-                    lastDate.setHours(0, 0, 0, 0);
-                    const diff = Math.round((now.getTime() - lastDate.getTime()) / 86400000);
-                    if (diff === 1) newStreak += 1;
-                    else if (diff > 1) newStreak = 1;
-                } else {
-                    newStreak = 1;
-                }
-                return {
-                    ...prev,
-                    studyStreakDays: newStreak,
-                    lastActiveDate: prev.lastActiveDate === todayStr ? prev.lastActiveDate : todayStr,
-                    totalStudyMinutes: prev.totalStudyMinutes + duration,
-                };
-            });
-        }
+        setTimetableTaskCompleted(dayIndex, taskId);
     };
 
     return (

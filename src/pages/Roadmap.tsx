@@ -2,6 +2,8 @@ import React from 'react';
 import { useStore } from '../engine/learningStore';
 import type { RoadmapCategory } from '../types';
 import { CheckSquare, Square, Plus, Minus, Lock } from 'lucide-react';
+import { syncRoadmapTopic } from '../engine/syncEngine';
+import { useAuth } from '../auth/AuthContext';
 
 export const Roadmap: React.FC = () => {
     const {
@@ -11,6 +13,8 @@ export const Roadmap: React.FC = () => {
         setRoadmap,
         setStatistics,
     } = useStore();
+
+    const { user } = useAuth();
 
     // Toggle a whole topic (non-microtask topics only)
     const toggleTopic = (categoryId: string, topicId: string) => {
@@ -38,6 +42,11 @@ export const Roadmap: React.FC = () => {
                 ...s,
                 totalRoadmapTopicsCompleted: s.totalRoadmapTopicsCompleted + (topic.completed && !wasComplete ? 1 : (!topic.completed && wasComplete ? -1 : 0)),
             }));
+
+            // Auto-unlock and DB write to roadmap_progress
+            if (user && user.id !== 'local') {
+                syncRoadmapTopic(categoryId, topicId, topic.progress || 0, topic.completed, user.id).catch(() => { });
+            }
 
             return next;
         });

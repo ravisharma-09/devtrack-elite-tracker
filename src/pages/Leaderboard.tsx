@@ -1,44 +1,55 @@
 import React, { useEffect, useState } from 'react';
-import { fetchLeaderboard, type LeaderboardUser } from '../engine/leaderboardEngine';
+import { useAuth } from '../auth/AuthContext';
+import { getSupabaseClient } from '../backend/supabaseClient';
 import { Trophy, Medal, Search, Activity, Flame } from 'lucide-react';
 
 export const Leaderboard: React.FC = () => {
-    // In DevTrack, useAuth gives user. Let's import it directly or assume it's loaded higher up.
-    // Actually, let's fetch from localStorage or use dummy ID if not found for now.
-    const userId = localStorage.getItem('supabase.auth.token')
-        ? JSON.parse(localStorage.getItem('supabase.auth.token') || '{}')?.currentSession?.user?.id
-        : null;
-
-    const [players, setPlayers] = useState<LeaderboardUser[]>([]);
+    const { user } = useAuth();
+    const [players, setPlayers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [myRank, setMyRank] = useState<number | null>(null);
-    const [activeTab, setActiveTab] = useState<'global' | 'batch'>('global');
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
-        setIsLoading(true);
-        // Determine batch if needed. We will use a dummy 'Newton School' or fetch from user metadata
-        const batchQuery = activeTab === 'batch' ? 'Newton School' : undefined;
+        let mounted = true;
+        const fetchLeaderboard = async () => {
+            setIsLoading(true);
+            const supabase = await getSupabaseClient();
+            if (!supabase) return;
 
-        fetchLeaderboard(100, batchQuery)
-            .then(data => setPlayers(data))
-            .finally(() => setIsLoading(false));
+            const { data } = await supabase
+                .from('profiles')
+                .select('id, username, skill_score, problems_solved, cf_rating')
+                .order('skill_score', { ascending: false })
+                .limit(100);
 
-    }, [activeTab]);
+            if (mounted && data) {
+                // Assign apparent rank
+                const rankedData = data.map((p: any, index: number) => ({
+                    ...p,
+                    rank: index + 1
+                }));
+                setPlayers(rankedData);
+            }
+            if (mounted) setIsLoading(false);
+        };
 
-    useEffect(() => {
-        // Find my rank if skill is known (rough estimate from top 100 or global query)
-        const myPlayer = players.find(p => p.user_id === userId);
-        if (myPlayer) {
-            setMyRank(myPlayer.rank || null);
-        } else {
-            // Need a real skill score to fetch from DB if outside top 100
-            // Since we compute it natively in Dashboard, we could cache it, or just leave it blank
-            setMyRank(null);
-        }
-    }, [players, userId]);
+        fetchLeaderboard();
+
+        // Supabase Realtime for live leaderboard updates
+        getSupabaseClient().then(supabase => {
+            if (!supabase) return;
+            const sub = supabase.channel('leaderboard-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload: any) => {
+                    fetchLeaderboard();
+                }).subscribe();
+            return () => { supabase.removeChannel(sub); };
+        });
+
+        return () => { mounted = false; };
+    }, []);
 
     const filteredPlayers = players.filter(p => p.username.toLowerCase().includes(searchQuery.toLowerCase()));
+    const myPlayer = players.find(p => p.id === user?.id);
 
     return (
         <div className="space-y-8 animate-fade-in pb-12">
@@ -49,34 +60,17 @@ export const Leaderboard: React.FC = () => {
                     </h2>
                     <p className="retro-text-sub">Global telemetry of the top DevTrack operatives.</p>
                 </div>
-
-                <div className="flex bg-brand-bg border border-brand-border rounded p-1">
-                    <button
-                        onClick={() => setActiveTab('global')}
-                        className={`px-4 py-2 text-xs font-mono uppercase tracking-widest rounded transition-colors ${activeTab === 'global' ? 'bg-brand-primary text-brand-bg font-bold' : 'text-brand-secondary hover:text-brand-primary'
-                            }`}
-                    >
-                        Global
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('batch')}
-                        className={`px-4 py-2 text-xs font-mono uppercase tracking-widest rounded transition-colors ${activeTab === 'batch' ? 'bg-brand-primary text-brand-bg font-bold' : 'text-brand-secondary hover:text-brand-primary'
-                            }`}
-                    >
-                        My Batch
-                    </button>
-                </div>
             </header>
 
-            {myRank && (
+            {myPlayer && (
                 <div className="retro-panel p-6 border-brand-accent/30 bg-brand-accent/5 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-full bg-brand-accent/20 flex items-center justify-center border border-brand-accent/50 text-brand-accent font-bold text-xl font-mono">
-                            #{myRank}
+                            #{myPlayer.rank}
                         </div>
                         <div>
                             <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-1">Your Current Position</h3>
-                            <div className="text-xl font-bold font-mono text-brand-primary">Top {Math.ceil(myRank / 10) * 10}% Tier</div>
+                            <div className="text-xl font-bold font-mono text-brand-primary">Top {Math.ceil(myPlayer.rank / 10) * 10}% Tier</div>
                         </div>
                     </div>
                 </div>
@@ -87,7 +81,7 @@ export const Leaderboard: React.FC = () => {
                     <Search size={18} className="text-brand-secondary" />
                     <input
                         type="text"
-                        placeholder="Search Operative Command..."
+                        placeholder="Search Operative..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         className="bg-transparent border-none text-brand-primary font-mono text-sm focus:outline-none w-full placeholder-brand-secondary/50"
@@ -115,13 +109,13 @@ export const Leaderboard: React.FC = () => {
                                 </tr>
                             ) : filteredPlayers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-brand-secondary">No operatives found in this sector.</td>
+                                    <td colSpan={5} className="px-6 py-12 text-center text-brand-secondary">No operatives found.</td>
                                 </tr>
                             ) : (
                                 filteredPlayers.map((p) => (
                                     <tr
                                         key={p.id}
-                                        className={`transition-colors hover:bg-brand-primary/5 ${p.user_id === userId ? 'bg-brand-primary/10 border-l-2 border-brand-primary' : ''}`}
+                                        className={`transition-colors hover:bg-brand-primary/5 ${p.id === user?.id ? 'bg-brand-primary/10 border-l-2 border-brand-primary' : ''}`}
                                     >
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">
@@ -131,9 +125,9 @@ export const Leaderboard: React.FC = () => {
                                                             <span className="w-[18px] text-center text-brand-secondary">#{p.rank}</span>}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 font-bold text-brand-primary">
+                                        <td className="px-6 py-4 font-bold text-brand-primary flex items-center gap-2">
                                             {p.username}
-                                            {p.user_id === userId && <span className="ml-2 text-[10px] text-brand-accent bg-brand-accent/10 px-1 py-0.5 rounded border border-brand-accent/20">YOU</span>}
+                                            {p.id === user?.id && <span className="text-[10px] text-brand-accent bg-brand-accent/10 px-1 py-0.5 rounded border border-brand-accent/20">YOU</span>}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="text-brand-accent font-bold text-lg flex items-center justify-end gap-1">
@@ -144,11 +138,11 @@ export const Leaderboard: React.FC = () => {
                                             {p.problems_solved}
                                         </td>
                                         <td className="px-6 py-4 text-center">
-                                            <span className={`px-2 py-0.5 rounded-full text-xs border ${p.codeforces_rating > 1400 ? 'border-cyan-500/30 text-cyan-400 bg-cyan-500/10' :
-                                                p.codeforces_rating > 1200 ? 'border-green-500/30 text-green-400 bg-green-500/10' :
+                                            <span className={`px-2 py-0.5 rounded-full text-xs border ${p.cf_rating > 1400 ? 'border-cyan-500/30 text-cyan-400 bg-cyan-500/10' :
+                                                p.cf_rating > 1200 ? 'border-green-500/30 text-green-400 bg-green-500/10' :
                                                     'border-brand-secondary/30 text-brand-secondary bg-brand-secondary/10'
                                                 }`}>
-                                                {p.codeforces_rating > 0 ? p.codeforces_rating : 'Unrated'}
+                                                {p.cf_rating > 0 ? p.cf_rating : 'Unrated'}
                                             </span>
                                         </td>
                                     </tr>
