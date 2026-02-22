@@ -181,10 +181,20 @@ export const Dashboard: React.FC = () => {
                                 <span className="text-xs font-mono text-brand-secondary/50">Groq llama3-70b</span>
                             </div>
                         </div>
+                    ) : isLoadingAI ? (
+                        <div className="h-full flex flex-col justify-center items-center text-center opacity-70 py-12">
+                            <Zap size={28} className="mb-4 text-brand-primary animate-pulse" />
+                            <div className="text-sm font-mono text-brand-primary tracking-widest uppercase">Initializing AI Core</div>
+                            <div className="text-xs font-mono text-brand-secondary mt-2">Syncing telemetry data...</div>
+                        </div>
                     ) : (
-                        <div className="h-full flex flex-col justify-center text-center opacity-50 py-8">
-                            <Zap size={24} className="mx-auto mb-2 text-brand-secondary" />
-                            <div className="text-sm font-mono text-brand-secondary">AI Engines analyzing telemetry...</div>
+                        <div className="h-full flex flex-col justify-center items-center text-center py-10 border border-red-900/30 bg-red-900/10 rounded">
+                            <Brain size={28} className="mb-3 text-red-500 opacity-80" />
+                            <div className="text-sm font-mono text-red-400 font-bold tracking-widest uppercase shadow-red-500 text-shadow">Neural Link Offline</div>
+                            <div className="text-xs font-mono text-brand-secondary mt-2 max-w-[80%]">Failed to establish connection with Groq AI engines. Verify API keys or check network status.</div>
+                            <button onClick={() => window.location.reload()} className="mt-4 px-4 py-1.5 border border-red-500/50 text-red-400 font-mono text-xs uppercase hover:bg-red-500/20 transition-colors rounded">
+                                Retry Connection
+                            </button>
                         </div>
                     )}
                 </div>
