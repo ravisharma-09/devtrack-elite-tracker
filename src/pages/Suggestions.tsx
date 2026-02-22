@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Brain, Code2, Target, ExternalLink, Zap, Terminal, LayoutTemplate, Github, FolderGit2, MessageSquareText } from 'lucide-react';
+import { Brain, Zap, Terminal, LayoutTemplate, Github, FolderGit2, MessageSquareText, ExternalLink, CheckCircle } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
 import problemBank from '../data/problemBank.json';
 
 type TabType = 'dsa' | 'opensource' | 'webdev';
 
-// Starter packs — always shown for new users
+// ── Starter packs (used ONLY as final fallback if no CF data found) ────────────
 const STARTER_DSA = [
     { name: 'Watermelon', link: 'https://codeforces.com/problemset/problem/4/A', topic: 'Math', rating: 800 },
     { name: 'Way Too Long Words', link: 'https://codeforces.com/problemset/problem/71/A', topic: 'Strings', rating: 800 },
@@ -25,60 +25,50 @@ const STARTER_WEBDEV = [
     { name: 'Weather App', description: 'Learn to use APIs by building a weather dashboard.', link: 'https://github.com/topics/weather-app', topic: 'Fetch API', difficulty: 'Medium' },
 ];
 
-function getInMemoryFallback(profile: any): any[] {
-    const cfRating: number = profile?.cf_rating || 800;
-    const weakTopics: string[] = profile?.weak_topics || [];
-    let pool = (problemBank as any[]).filter(p => p.rating >= cfRating - 100 && p.rating <= cfRating + 300);
-    if (pool.length === 0) pool = (problemBank as any[]).filter(p => p.rating <= 900);
-    if (pool.length === 0) pool = STARTER_DSA;
-    const byWeak = pool.filter(p => weakTopics.includes(p.topic));
-    const byGeneral = pool.filter(p => !weakTopics.includes(p.topic));
-    const selected = [...byWeak.slice(0, 3), ...byGeneral.slice(0, 3 - byWeak.slice(0, 3).length)];
-    while (selected.length < 3) selected.push(STARTER_DSA[selected.length % STARTER_DSA.length]);
-    return [
-        ...selected.map(p => ({ type: 'dsa', content: { title: p.name, description: 'Practice ' + p.topic + ' at rating ' + p.rating + '.', link: p.link, topic: p.topic, difficulty: p.rating > 1400 ? 'Hard' : p.rating > 1000 ? 'Medium' : 'Easy' } })),
-        ...STARTER_OPENSOURCE.map(o => ({ type: 'opensource', content: o })),
-        ...STARTER_WEBDEV.map(w => ({ type: 'webdev', content: w })),
-    ];
-}
+// ── Build recs from real user data ────────────────────────────────────────────
+function buildPersonalizedRecs(cfStats: any, weakTopics: string[], roadmapTopics: string[]): any[] {
+    const cfRating: number = cfStats?.rating || 800;
 
-async function insertStarterRecs(supabase: any, userId: string, profile: any): Promise<void> {
-    const cfRating: number = profile?.cf_rating || 800;
-    const weakTopics: string[] = profile?.weak_topics || [];
-
-    // Pick DSA problems near user's rating
-    let pool = (problemBank as any[]).filter(p => p.rating >= cfRating - 100 && p.rating <= cfRating + 300);
-    if (pool.length === 0) pool = (problemBank as any[]).filter(p => p.rating <= 900);
+    // DSA — pick problems near user's real CF rating
+    let pool = (problemBank as any[]).filter(p => p.rating >= cfRating - 150 && p.rating <= cfRating + 300);
+    if (pool.length < 3) pool = (problemBank as any[]).filter(p => p.rating >= cfRating - 300 && p.rating <= cfRating + 400);
+    if (pool.length < 3) pool = (problemBank as any[]).filter(p => p.rating <= 900);
     if (pool.length === 0) pool = STARTER_DSA;
 
-    // Prefer weak topics
-    const byWeak = pool.filter(p => weakTopics.includes(p.topic));
-    const byGeneral = pool.filter(p => !weakTopics.includes(p.topic));
-    const selected = [...byWeak.slice(0, 3), ...byGeneral.slice(0, 3 - byWeak.slice(0, 3).length)];
-    while (selected.length < 3) selected.push(STARTER_DSA[selected.length]);
+    // Prioritise weak topics
+    const byWeak = pool.filter(p => weakTopics.some(wt => wt.toLowerCase().includes(p.topic.toLowerCase()) || p.topic.toLowerCase().includes(wt.toLowerCase())));
+    const byGeneral = pool.filter(p => !byWeak.includes(p));
+    const dsaSelected = [...byWeak.slice(0, 3), ...byGeneral.slice(0, 3 - Math.min(3, byWeak.length))];
+    while (dsaSelected.length < 3) dsaSelected.push(STARTER_DSA[dsaSelected.length % STARTER_DSA.length]);
 
-    const rows: any[] = [
-        ...selected.map(p => ({
-            user_id: userId, type: 'dsa',
-            content: {
-                title: p.name,
-                description: 'Targeted practice for ' + p.topic + ' at rating ' + p.rating + '.',
-                link: p.link, topic: p.topic,
-                difficulty: p.rating > 1400 ? 'Hard' : p.rating > 1000 ? 'Medium' : 'Easy'
-            }
-        })),
-        ...STARTER_OPENSOURCE.map(o => ({ user_id: userId, type: 'opensource', content: o })),
-        ...STARTER_WEBDEV.map(w => ({ user_id: userId, type: 'webdev', content: w })),
-    ];
+    const dsaRecs = dsaSelected.map(p => ({
+        type: 'dsa',
+        content: {
+            title: p.name,
+            description: 'Codeforces problem at rating ' + p.rating + '. Topic: ' + p.topic + '.',
+            link: p.link, topic: p.topic,
+            difficulty: p.rating > 1600 ? 'Hard' : p.rating > 1200 ? 'Medium' : 'Easy',
+        }
+    }));
 
-    for (const row of rows) {
-        await supabase.from('recommendations').insert(row).catch(() => { });
-    }
+    // Open Source
+    const osRecs = STARTER_OPENSOURCE.map(o => ({ type: 'opensource', content: o }));
+
+    // Web Projects — personalise based on roadmap topics if available
+    const webRecs: any[] = [];
+    const rtLower = roadmapTopics.map(t => t.toLowerCase());
+    if (rtLower.some(t => t.includes('react'))) webRecs.push({ type: 'webdev', content: { name: 'Blog App', description: 'Master React State and Props by building a full blog.', link: 'https://github.com/topics/react-blog', topic: 'React', difficulty: 'Hard' } });
+    if (rtLower.some(t => t.includes('node') || t.includes('backend'))) webRecs.push({ type: 'webdev', content: { name: 'REST API', description: 'Build a full CRUD REST API with Node.js and Express.', link: 'https://github.com/topics/rest-api', topic: 'Node.js', difficulty: 'Medium' } });
+    if (rtLower.some(t => t.includes('dom') || t.includes('javascript'))) webRecs.push({ type: 'webdev', content: { name: 'Todo App', description: 'Master DOM manipulation by building a functional todo app.', link: 'https://github.com/topics/todo-app', topic: 'DOM', difficulty: 'Medium' } });
+    if (webRecs.length === 0) webRecs.push(...STARTER_WEBDEV.map(w => ({ type: 'webdev', content: w })));
+
+    return [...dsaRecs, ...osRecs, ...webRecs];
 }
 
 export const Suggestions: React.FC = () => {
     const { user } = useAuth();
     const [recommendations, setRecommendations] = useState<any[]>([]);
+    const [profile, setProfile] = useState<{ cfHandle?: string; cfRating?: number; weakTopics?: string[] }>({});
     const [analysis, setAnalysis] = useState<{ dsa?: string; github?: string; webdev?: string }>({});
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<TabType>('dsa');
@@ -93,103 +83,117 @@ export const Suggestions: React.FC = () => {
                 const supabase = await getSupabaseClient();
                 if (!supabase) return;
 
-                // 1. Fetch existing recs
-                const { data: recData } = await supabase
+                // 1. Load user handles (CF handle etc.) from `users` table — this is where Profile saves them
+                const { data: userRow } = await supabase
+                    .from('users')
+                    .select('codeforces_handle, leetcode_username, github_username')
+                    .eq('id', user.id)
+                    .single();
+
+                // 2. Load external stats (real CF rating, LC stats, GH stats)
+                const { data: extStats } = await supabase
+                    .from('external_stats')
+                    .select('cf, lc, gh')
+                    .eq('user_id', user.id)
+                    .single();
+
+                // 3. Load roadmap topics in progress
+                const { data: roadmapData } = await supabase
+                    .from('roadmap_progress')
+                    .select('topic_id')
+                    .eq('user_id', user.id)
+                    .eq('completed', false);
+
+                const cfStats = extStats?.cf || null;
+                const cfRating = cfStats?.rating || 800;
+                const hasCFHandle = !!(userRow?.codeforces_handle);
+                const weakTopics: string[] = cfStats?.weakTopics || [];
+                const roadmapTopics: string[] = roadmapData?.map((r: any) => r.topic_id || '').filter(Boolean) || [];
+
+                if (mounted) {
+                    setProfile({
+                        cfHandle: userRow?.codeforces_handle || '',
+                        cfRating,
+                        weakTopics,
+                    });
+                }
+
+                // 4. Check existing DB recs
+                const { data: dbRecs } = await supabase
                     .from('recommendations')
                     .select('*')
                     .eq('user_id', user.id)
                     .order('created_at', { ascending: false });
 
-                if (recData && recData.length > 0) {
-                    if (mounted) setRecommendations(recData);
-                } else {
-                    // 2. DB is empty — fetch profile for personalisation
-                    console.log('⚡ Empty DB — inserting starter recs...');
-                    const { data: profile } = await supabase
-                        .from('profiles').select('cf_rating, weak_topics').eq('id', user.id).single();
+                // 5. If DB has recs AND are recent (< 6h old), show them
+                const isRecent = dbRecs && dbRecs.length > 0 &&
+                    new Date(dbRecs[0].created_at).getTime() > Date.now() - 6 * 60 * 60 * 1000;
 
-                    // 3. Try to insert to DB, but don't block rendering if it fails
-                    try {
-                        await insertStarterRecs(supabase, user.id, profile);
-                        const { data: fresh } = await supabase
-                            .from('recommendations').select('*')
-                            .eq('user_id', user.id).order('created_at', { ascending: false });
-                        if (mounted && fresh && fresh.length > 0) {
-                            setRecommendations(fresh);
-                        } else {
-                            // DB write failed or still empty — render in-memory fallback
-                            if (mounted) setRecommendations(getInMemoryFallback(profile));
-                        }
-                    } catch (insertErr) {
-                        console.warn('DB insert failed, using in-memory fallback:', insertErr);
-                        if (mounted) setRecommendations(getInMemoryFallback(profile));
-                    }
+                if (isRecent) {
+                    if (mounted) setRecommendations(dbRecs!);
+                } else {
+                    // 6. Build fresh personalized recs
+                    const freshRecs = buildPersonalizedRecs(cfStats, weakTopics, roadmapTopics);
+
+                    // 7. Write to DB (fire-and-forget, don't block UI)
+                    supabase.from('recommendations').delete().eq('user_id', user.id).then(() => {
+                        freshRecs.forEach(rec =>
+                            supabase.from('recommendations').insert({ user_id: user.id, ...rec }).catch(() => { })
+                        );
+                    }).catch(() => { });
+
+                    if (mounted) setRecommendations(freshRecs);
                 }
 
-                // AI analysis text (non-blocking)
+                // 8. Set contextual AI analysis text
+                const analysisText: { dsa: string; github: string; webdev: string } = {
+                    dsa: hasCFHandle
+                        ? `Showing Codeforces problems at your rating level (${cfRating}). ${weakTopics.length > 0 ? 'Weak topics detected: ' + weakTopics.slice(0, 3).join(', ') + '. Prioritised.' : 'Sync your profile again to detect weak topics.'}`
+                        : 'No Codeforces handle linked. Starter problems shown. Add your CF handle in Profile for personalized targets.',
+                    github: 'Open source contribution targets. Complete these to build your GitHub reputation.',
+                    webdev: roadmapTopics.length > 0
+                        ? 'Projects matched to your current roadmap topics: ' + roadmapTopics.slice(0, 3).join(', ') + '.'
+                        : 'Starter web projects. Update your Roadmap for personalized project suggestions.',
+                };
+                if (mounted) setAnalysis(analysisText);
+
+                // AI cache (optional, non-blocking)
                 try {
                     const { data: cacheData } = await supabase
-                        .from('ai_analytics_cache').select('suggestions')
-                        .eq('user_id', user.id).single();
+                        .from('ai_analytics_cache').select('suggestions').eq('user_id', user.id).single();
                     if (mounted && cacheData?.suggestions?.targeted_practice_analysis) {
-                        setAnalysis(cacheData.suggestions.targeted_practice_analysis);
+                        setAnalysis(prev => ({ ...prev, ...cacheData.suggestions.targeted_practice_analysis }));
                     }
-                } catch (_) { /* analytics cache missing is fine */ }
+                } catch (_) { }
 
             } catch (e) {
                 console.error('Suggestions load error:', e);
-                // Last resort — show hardcoded in-memory cards so page is never blank
-                if (mounted) setRecommendations(getInMemoryFallback(null));
+                if (mounted) setRecommendations(buildPersonalizedRecs(null, [], []));
             } finally {
                 if (mounted) setLoading(false);
             }
         };
 
         load();
-
-        // Real-time listener — update if engine pushes more recs later
-        getSupabaseClient().then(supabase => {
-            if (!supabase) return;
-            const sub = supabase.channel('recs-live')
-                .on('postgres_changes', {
-                    event: 'INSERT', schema: 'public', table: 'recommendations',
-                    filter: 'user_id=eq.' + user.id
-                }, () => { if (mounted) load(); })
-                .subscribe();
-            return () => supabase.removeChannel(sub);
-        });
-
         return () => { mounted = false; };
     }, [user]);
 
-    const activeRecs = activeTab === 'dsa'
-        ? recommendations.filter(r => r.type === 'dsa')
-        : activeTab === 'opensource'
-            ? recommendations.filter(r => r.type === 'opensource')
-            : recommendations.filter(r => r.type === 'webdev' || r.type === 'project');
+    const activeRecs = recommendations.filter(r =>
+        activeTab === 'dsa' ? r.type === 'dsa'
+            : activeTab === 'opensource' ? r.type === 'opensource'
+                : r.type === 'webdev' || r.type === 'project'
+    );
 
-    const renderAiAnalysisBox = () => {
-        let text = '';
-        if (activeTab === 'dsa') text = analysis.dsa || 'Starter problems selected based on your skill level. Add your Codeforces handle in Profile for personalised targets.';
-        if (activeTab === 'opensource') text = analysis.github || 'Great open-source projects to make your first contribution.';
-        if (activeTab === 'webdev') text = analysis.webdev || 'Starter web projects to build your portfolio. Update your roadmap for personalised suggestions.';
-
-        return (
-            <div className="retro-panel p-6 border-brand-accent/40 bg-brand-accent/5 mb-8 relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-accent/60 to-transparent" />
-                <h3 className="text-sm font-mono uppercase text-brand-accent tracking-widest mb-3 flex items-center gap-2">
-                    <MessageSquareText size={16} /> Targeted AI Intelligence
-                </h3>
-                <p className="text-brand-primary leading-relaxed text-sm font-mono opacity-90">{text}</p>
-            </div>
-        );
-    };
+    const analysisText = activeTab === 'dsa' ? analysis.dsa
+        : activeTab === 'opensource' ? analysis.github
+            : analysis.webdev;
 
     if (loading) {
         return (
             <div className="retro-panel p-12 text-center border-brand-primary/20 bg-brand-bg/50 mt-8 animate-fade-in">
                 <Brain className="w-16 h-16 mx-auto text-brand-secondary/30 mb-4 animate-pulse" />
                 <h3 className="text-brand-secondary font-mono tracking-widest uppercase mb-2">Scanning for Targets...</h3>
+                <p className="text-xs font-mono text-brand-secondary/40">Reading your profile data...</p>
             </div>
         );
     }
@@ -198,9 +202,12 @@ export const Suggestions: React.FC = () => {
         <div className="space-y-8 animate-fade-in pb-12">
             <header className="mb-6 border-b border-brand-border pb-4">
                 <h2 className="text-2xl font-bold retro-text tracking-widest uppercase mb-2 flex items-center gap-3">
-                    <Target className="text-brand-accent" /> Targeted Practice
+                    <Zap className="text-brand-accent" /> Targeted Practice
                 </h2>
-                <p className="retro-text-sub">AI & Engine curated targets focused on your explicit weaknesses</p>
+                <p className="retro-text-sub">
+                    AI & Engine curated targets focused on your explicit weaknesses
+                    {profile.cfHandle && <span className="ml-2 text-green-400">· CF: {profile.cfHandle} ({profile.cfRating})</span>}
+                </p>
             </header>
 
             {/* TABS */}
@@ -223,13 +230,25 @@ export const Suggestions: React.FC = () => {
             </div>
 
             <div className="animate-fade-in mt-6">
-                {renderAiAnalysisBox()}
+                {/* AI Intelligence Banner */}
+                <div className="retro-panel p-5 border-brand-accent/30 bg-brand-accent/5 mb-6 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-accent/60 to-transparent" />
+                    <h3 className="text-sm font-mono uppercase text-brand-accent tracking-widest mb-2 flex items-center gap-2">
+                        <MessageSquareText size={14} /> Targeted AI Intelligence
+                    </h3>
+                    <p className="text-brand-primary leading-relaxed text-sm font-mono opacity-90">{analysisText}</p>
+                    {!profile.cfHandle && (
+                        <a href="/profile" className="mt-3 inline-flex items-center gap-1.5 text-xs font-mono text-brand-accent hover:underline">
+                            <CheckCircle size={12} /> Link Codeforces handle in Profile for personalised targets →
+                        </a>
+                    )}
+                </div>
 
                 {activeRecs.length === 0 ? (
                     <div className="retro-panel p-12 text-center border-brand-primary/20 bg-brand-bg/50">
                         <FolderGit2 className="w-16 h-16 mx-auto text-brand-secondary/30 mb-4" />
-                        <h3 className="text-brand-secondary font-mono tracking-widest uppercase mb-2">Loading Targets...</h3>
-                        <p className="text-sm text-brand-secondary/60 font-mono">Syncing your profile data...</p>
+                        <h3 className="text-brand-secondary font-mono tracking-widest uppercase mb-2">No Targets Found</h3>
+                        <p className="text-sm text-brand-secondary/60 font-mono">Link your Codeforces handle in Profile to see personalized problems.</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -238,40 +257,38 @@ export const Suggestions: React.FC = () => {
                                 href={q.content?.link || '#'}
                                 target="_blank"
                                 rel="noreferrer"
-                                className={`retro-panel p-5 block group transition-all duration-300 relative overflow-hidden ${activeTab === 'dsa' ? 'border-brand-accent/20 hover:border-brand-accent bg-brand-bg/40' :
-                                    activeTab === 'opensource' ? 'border-green-500/20 hover:border-green-500 bg-brand-bg/40' :
-                                        'border-brand-primary/20 hover:border-brand-primary bg-brand-bg/40'}`}>
+                                className={`retro-panel p-5 block group transition-all duration-300 relative overflow-hidden ${activeTab === 'dsa' ? 'border-brand-accent/20 hover:border-brand-accent bg-brand-bg/40'
+                                    : activeTab === 'opensource' ? 'border-green-500/20 hover:border-green-500 bg-brand-bg/40'
+                                        : 'border-brand-primary/20 hover:border-brand-primary bg-brand-bg/40'}`}>
 
                                 <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity translate-x-4 group-hover:translate-x-0">
-                                    <ExternalLink size={16} className={activeTab === 'dsa' ? 'text-brand-accent' : activeTab === 'opensource' ? 'text-green-500' : 'text-brand-primary'} />
+                                    <ExternalLink size={14} className={activeTab === 'dsa' ? 'text-brand-accent' : activeTab === 'opensource' ? 'text-green-500' : 'text-brand-primary'} />
                                 </div>
 
                                 <div className="flex items-center gap-2 mb-3">
-                                    {activeTab === 'dsa' && <Zap size={16} className="text-brand-accent" />}
-                                    {activeTab === 'opensource' && <Github size={16} className="text-green-400" />}
-                                    {activeTab === 'webdev' && <LayoutTemplate size={16} className="text-brand-primary" />}
-                                    <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary line-clamp-1">
-                                        {q.content?.topic || 'Target Area'}
+                                    {activeTab === 'dsa' && <Zap size={14} className="text-brand-accent" />}
+                                    {activeTab === 'opensource' && <Github size={14} className="text-green-400" />}
+                                    {activeTab === 'webdev' && <LayoutTemplate size={14} className="text-brand-primary" />}
+                                    <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary">
+                                        {q.content?.topic || 'Target'}
                                     </span>
                                 </div>
 
-                                <h4 className={`font-bold font-mono text-sm leading-snug mb-3 transition-colors ${activeTab === 'dsa' ? 'text-brand-primary group-hover:text-brand-accent' :
-                                    activeTab === 'opensource' ? 'text-green-500 group-hover:text-green-400' :
-                                        'text-brand-accent group-hover:text-brand-primary'}`}>
-                                    {q.content?.title || q.title}
+                                <h4 className={`font-bold font-mono text-sm leading-snug mb-2 transition-colors ${activeTab === 'dsa' ? 'text-brand-primary group-hover:text-brand-accent'
+                                    : activeTab === 'opensource' ? 'text-green-500 group-hover:text-green-400'
+                                        : 'text-brand-accent group-hover:text-brand-primary'}`}>
+                                    {q.content?.title || q.content?.name || q.title}
                                 </h4>
 
                                 <p className="text-brand-secondary/80 text-xs mb-4 line-clamp-3 leading-relaxed">
-                                    {q.content?.description || q.description}
+                                    {q.content?.description}
                                 </p>
 
-                                <div className="flex items-center gap-2 mt-auto">
-                                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${q.content?.difficulty === 'Hard' ? 'text-red-400 bg-red-400/10 border-red-400/20' :
-                                        q.content?.difficulty === 'Medium' ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20' :
-                                            'text-green-400 bg-green-400/10 border-green-400/20'}`}>
-                                        {q.content?.difficulty || 'Easy'}
-                                    </span>
-                                </div>
+                                <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${q.content?.difficulty === 'Hard' ? 'text-red-400 bg-red-400/10 border-red-400/20'
+                                    : q.content?.difficulty === 'Medium' ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20'
+                                        : 'text-green-400 bg-green-400/10 border-green-400/20'}`}>
+                                    {q.content?.difficulty || 'Easy'}
+                                </span>
                             </a>
                         ))}
                     </div>
