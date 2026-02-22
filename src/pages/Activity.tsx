@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
 import { syncCodeforcesActivity, syncGitHubActivity, syncLeetCodeActivity } from '../engine/externalActivityEngine';
+import { RetroLoader } from '../components/RetroLoader';
 import { Activity as ActivityIcon, Code2, GitCommit, ExternalLink, RefreshCw, Github, Zap, Trophy } from 'lucide-react';
 
 interface ActivityItem {
@@ -185,9 +186,8 @@ export const ActivityFeed: React.FC = () => {
             )}
 
             {isLoading ? (
-                <div className="retro-panel p-12 text-center">
-                    <ActivityIcon className="w-12 h-12 mx-auto text-brand-secondary/30 mb-4 animate-pulse" />
-                    <p className="text-brand-secondary font-mono text-sm uppercase tracking-widest">Scanning your activity...</p>
+                <div className="h-64 border border-brand-border/30 bg-brand-bg/50 mt-4 relative">
+                    <RetroLoader title="Accessing Telemetry" subtitle="Scanning external activity feeds..." />
                 </div>
             ) : activities.length === 0 ? (
                 <div className="retro-panel p-12 text-center border-brand-border/30">

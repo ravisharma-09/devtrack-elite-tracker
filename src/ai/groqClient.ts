@@ -1,13 +1,14 @@
 
 
 
+
 export interface GroqMessage {
     role: "system" | "user" | "assistant";
     content: string;
 }
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const AI_MODEL = "llama3-70b-8192";
+const AI_MODEL = "llama-3.3-70b-versatile";
 
 /**
  * Reusable base client for calling Groq with structured JSON outputs.

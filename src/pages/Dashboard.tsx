@@ -5,6 +5,7 @@ import { AddStudySessionModal } from '../components/AddStudySessionModal';
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
 import { getSupabaseClient } from '../backend/supabaseClient';
 import { Link } from 'react-router-dom';
+import { RetroLoader } from '../components/RetroLoader';
 import { Brain, Clock, PlusCircle, Target, Flame, TrendingUp, Zap, Activity as ActivityIcon } from 'lucide-react';
 export const Dashboard: React.FC = () => {
     const { user } = useAuth();
@@ -182,11 +183,7 @@ export const Dashboard: React.FC = () => {
                             </div>
                         </div>
                     ) : isLoadingAI ? (
-                        <div className="h-full flex flex-col justify-center items-center text-center opacity-70 py-12">
-                            <Zap size={28} className="mb-4 text-brand-primary animate-pulse" />
-                            <div className="text-sm font-mono text-brand-primary tracking-widest uppercase">Initializing AI Core</div>
-                            <div className="text-xs font-mono text-brand-secondary mt-2">Syncing telemetry data...</div>
-                        </div>
+                        <RetroLoader title="Initializing AI Core" subtitle="Syncing telemetry data..." />
                     ) : (
                         <div className="h-full flex flex-col justify-center items-center text-center py-10 border border-red-900/30 bg-red-900/10 rounded">
                             <Brain size={28} className="mb-3 text-red-500 opacity-80" />

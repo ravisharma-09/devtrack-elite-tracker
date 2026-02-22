@@ -3,6 +3,7 @@ import { Brain, Zap, Terminal, LayoutTemplate, Github, ExternalLink, RefreshCw, 
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
 import { runDSASuggestionEngine, type DSASuggestionResult, type DSAProblem } from '../core/dsaSuggestionEngine';
+import { RetroLoader } from '../components/RetroLoader';
 
 type TabType = 'dsa' | 'opensource' | 'webdev';
 
@@ -122,10 +123,8 @@ export const Suggestions: React.FC = () => {
     const webRecs = cfRating >= 1200 || lcSolved > 50 ? [...WEB_BEGINNER, ...WEB_ADVANCED] : WEB_BEGINNER;
 
     if (loading) return (
-        <div className="retro-panel p-12 text-center mt-8 animate-fade-in">
-            <Brain className="w-16 h-16 mx-auto text-brand-secondary/30 mb-4 animate-pulse" />
-            <h3 className="text-brand-secondary font-mono tracking-widest uppercase mb-2">Building Your Plan...</h3>
-            {syncing && <p className="text-xs font-mono text-brand-accent animate-pulse mt-1">Fetching Codeforces data...</p>}
+        <div className="h-64 mt-8 relative">
+            <RetroLoader title="Building Practice Plan" subtitle={syncing ? "Fetching external telemetry..." : "Analyzing DSA mastery..."} />
         </div>
     );
 

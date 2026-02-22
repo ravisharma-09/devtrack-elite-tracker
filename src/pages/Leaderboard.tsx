@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
+import { RetroLoader } from '../components/RetroLoader';
 import { Trophy, Medal, Search, Activity, Flame } from 'lucide-react';
 
 export const Leaderboard: React.FC = () => {
@@ -102,9 +103,10 @@ export const Leaderboard: React.FC = () => {
                         <tbody className="divide-y divide-brand-border/30">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-brand-secondary/50">
-                                        <Activity className="mx-auto block mb-2 animate-pulse" />
-                                        Syncing Global Network...
+                                    <td colSpan={5} className="p-0">
+                                        <div className="h-64 border-b border-brand-border/30 bg-brand-bg/50 relative">
+                                            <RetroLoader title="Syncing Network" subtitle="Scanning global telemetry..." />
+                                        </div>
                                     </td>
                                 </tr>
                             ) : filteredPlayers.length === 0 ? (

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Github, Star, GitFork, Users, ExternalLink, Zap, Award, Code2, BookOpen, Flame, Calendar, CheckCircle, ArrowRight, Globe } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
+import { RetroLoader } from '../components/RetroLoader';
 
 // ── Open Source Programs ─────────────────────────────────────────────────────
 const OS_PROGRAMS = [
@@ -272,9 +273,8 @@ export const GitHubHub: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="retro-panel p-12 text-center mt-8">
-                <Github className="w-16 h-16 mx-auto text-brand-secondary/30 mb-4 animate-pulse" />
-                <h3 className="text-brand-secondary font-mono tracking-widest uppercase">Loading GitHub Hub...</h3>
+            <div className="h-64 mt-8 relative">
+                <RetroLoader title="Accessing Repository" subtitle="Fetching GitHub statistics..." />
             </div>
         );
     }
