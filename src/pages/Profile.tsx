@@ -72,12 +72,14 @@ export const Profile: React.FC = () => {
             // Mark connection status persistently
             const supabase = await (await import('../backend/supabaseClient')).getSupabaseClient();
             if (supabase) {
-                await supabase.from('users').update({
-                    cf_connected: !!result.cf,
-                    lc_connected: !!result.lc,
-                    gh_connected: !!result.gh,
-                    ...(((result.cf as any)?.weakTopics) ? { weak_topics: (result.cf as any).weakTopics } : {}),
-                }).eq('id', user.id).catch(() => { });
+                try {
+                    await supabase.from('users').update({
+                        cf_connected: !!result.cf,
+                        lc_connected: !!result.lc,
+                        gh_connected: !!result.gh,
+                        ...(((result.cf as any)?.weakTopics) ? { weak_topics: (result.cf as any).weakTopics } : {}),
+                    }).eq('id', user.id);
+                } catch { /* non-critical — column may not exist yet */ }
             }
 
             if (result.cf || result.lc || result.gh) {
