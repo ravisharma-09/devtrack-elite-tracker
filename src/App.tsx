@@ -17,16 +17,64 @@ import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { useEffect } from 'react';
 import { useAuth } from './auth/AuthContext';
-import { bootstrapUser } from './core/bootstrap';
+import { getSupabaseClient } from './backend/supabaseClient';
 
 function AppContent() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user) {
-      // Use user.id directly from AuthContext — avoids the broken supabase.auth.getUser() 403
-      bootstrapUser(user.id).catch(e => console.warn('Bootstrap error:', e));
-    }
+    if (!user) return;
+
+    // ── Permanent auto-sync: runs once per login, skips if data < 2h old ──
+    const autoSync = async () => {
+      try {
+        const supabase = await getSupabaseClient();
+        if (!supabase) return;
+
+        // Load handles saved in Profile
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('codeforces_handle, leetcode_username, github_username')
+          .eq('id', user.id)
+          .single();
+        if (!userRow) return;
+
+        const { codeforces_handle: cfHandle, leetcode_username: lcUsername, github_username: ghUsername } = userRow;
+        if (!cfHandle && !lcUsername && !ghUsername) return; // Nothing connected yet
+
+        // Check staleness — skip if synced < 2h ago
+        const { data: extRow } = await supabase
+          .from('external_stats')
+          .select('last_synced')
+          .eq('user_id', user.id)
+          .single();
+        const lastSync = extRow?.last_synced ? new Date(extRow.last_synced).getTime() : 0;
+        const stale = Date.now() - lastSync > 2 * 60 * 60 * 1000; // 2 hours
+        if (!stale) {
+          console.log('[AutoSync] Data is fresh, skipping sync.');
+          return;
+        }
+
+        console.log('[AutoSync] Syncing external activity in background...');
+        const { syncCodeforcesActivity, syncGitHubActivity, syncLeetCodeActivity } = await import('./engine/externalActivityEngine');
+        const { fetchCodeforcesStats } = await import('./api/codeforcesApi');
+
+        // Fire all syncs in parallel — completely non-blocking for the UI
+        await Promise.all([
+          cfHandle ? syncCodeforcesActivity(user.id, cfHandle) : Promise.resolve(),
+          lcUsername ? syncLeetCodeActivity(user.id, lcUsername) : Promise.resolve(),
+          ghUsername ? syncGitHubActivity(user.id, ghUsername) : Promise.resolve(),
+          cfHandle ? fetchCodeforcesStats(cfHandle).then(cf => {
+            if (cf) supabase.from('external_stats').upsert({ user_id: user.id, cf, last_synced: new Date().toISOString() }).catch(() => { });
+          }) : Promise.resolve(),
+        ]);
+        console.log('[AutoSync] Done.');
+      } catch (e) {
+        console.warn('[AutoSync] Background sync failed:', e);
+      }
+    };
+
+    autoSync();
   }, [user]);
 
   return (

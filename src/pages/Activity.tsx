@@ -1,169 +1,263 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
-import { Activity as ActivityIcon, Code2, GitCommit, Zap, ExternalLink, BookOpen } from 'lucide-react';
+import { syncCodeforcesActivity, syncGitHubActivity, syncLeetCodeActivity } from '../engine/externalActivityEngine';
+import { Activity as ActivityIcon, Code2, GitCommit, ExternalLink, RefreshCw, Github, Zap, Trophy } from 'lucide-react';
+
+interface ActivityItem {
+    id: string;
+    platform: 'Codeforces' | 'LeetCode' | 'GitHub';
+    activity_type: string;
+    activity_title: string;
+    activity_link?: string;
+    activity_timestamp: string;
+    metadata?: any;
+}
 
 export const ActivityFeed: React.FC = () => {
     const { user } = useAuth();
-    const [activities, setActivities] = useState<any[]>([]);
+    const [activities, setActivities] = useState<ActivityItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
+    const [syncMsg, setSyncMsg] = useState('');
+
+    const fetchActivities = async (triggerSync = false) => {
+        if (!user) return;
+        const supabase = await getSupabaseClient();
+        if (!supabase) return;
+
+        // Read from `external_activity` — the correct table
+        const { data } = await supabase
+            .from('external_activity')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('activity_timestamp', { ascending: false })
+            .limit(60);
+
+        if (data && data.length > 0) {
+            setActivities(data);
+            setIsLoading(false);
+            return;
+        }
+
+        // Nothing in DB — auto-trigger sync first time
+        if (triggerSync || data?.length === 0) {
+            setSyncing(true);
+            setSyncMsg('Fetching your activity from CF, LeetCode, GitHub...');
+            try {
+                const { data: userRow } = await supabase
+                    .from('users')
+                    .select('codeforces_handle, leetcode_username, github_username')
+                    .eq('id', user.id)
+                    .single();
+
+                const { cfHandle, lcUsername, ghUsername } = {
+                    cfHandle: userRow?.codeforces_handle || '',
+                    lcUsername: userRow?.leetcode_username || '',
+                    ghUsername: userRow?.github_username || '',
+                };
+
+                if (!cfHandle && !lcUsername && !ghUsername) {
+                    setSyncMsg('No handles connected. Go to Profile → Platform Connections.');
+                    setSyncing(false);
+                    setIsLoading(false);
+                    return;
+                }
+
+                await Promise.all([
+                    cfHandle ? syncCodeforcesActivity(user.id, cfHandle) : Promise.resolve(),
+                    lcUsername ? syncLeetCodeActivity(user.id, lcUsername) : Promise.resolve(),
+                    ghUsername ? syncGitHubActivity(user.id, ghUsername) : Promise.resolve(),
+                ]);
+
+                // Refetch
+                const { data: fresh } = await supabase
+                    .from('external_activity')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('activity_timestamp', { ascending: false })
+                    .limit(60);
+
+                setActivities(fresh || []);
+                setSyncMsg('');
+            } catch (e) {
+                console.error('[Activity] Sync failed:', e);
+                setSyncMsg('Sync failed. Check your internet connection.');
+            } finally {
+                setSyncing(false);
+                setIsLoading(false);
+            }
+        } else {
+            setIsLoading(false);
+        }
+    };
 
     useEffect(() => {
         if (!user) return;
-        let mounted = true;
-
-        const fetchActivities = async () => {
-            setIsLoading(true);
-            const supabase = await getSupabaseClient();
-            if (!supabase) return;
-
-            const { data } = await supabase
-                .from('activities')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
-                .limit(50);
-
-            let renderData = data || [];
-            if (mounted && renderData.length === 0) {
-                console.log("⚠️ Activity array empty. Forcing background syncEngine run...");
-                const { syncEngine } = await import('../core/syncEngine');
-                await syncEngine(user.id);
-                // Refetch after forceful sync
-                const { data: updatedData } = await supabase
-                    .from('activities')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false })
-                    .limit(50);
-                renderData = updatedData || [];
-            }
-
-            if (mounted) {
-                setActivities(renderData);
-                setIsLoading(false);
-            }
-        };
-
-        fetchActivities();
-
-        getSupabaseClient().then(supabase => {
-            if (!supabase) return;
-            const activitiesSubscription = supabase
-                .channel('public:activities')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'activities', filter: `user_id=eq.${user.id}` }, () => {
-                    fetchActivities(); // Refresh feed completely on change
-                })
-                .subscribe();
-            return () => { supabase.removeChannel(activitiesSubscription); };
-        });
-
-        return () => { mounted = false; };
+        fetchActivities(true);
     }, [user]);
 
-    const getTimeAgo = (timestamp: string) => {
-        const diff = Date.now() - new Date(timestamp).getTime();
-        const minutes = Math.floor(diff / 60000);
-        const hours = Math.floor(minutes / 60);
-        const days = Math.floor(hours / 24);
+    const handleManualSync = async () => {
+        if (syncing || !user) return;
+        setSyncing(true);
+        setSyncMsg('Syncing...');
+        const supabase = await getSupabaseClient();
+        if (!supabase) return;
+        try {
+            const { data: userRow } = await supabase
+                .from('users')
+                .select('codeforces_handle, leetcode_username, github_username')
+                .eq('id', user.id)
+                .single();
 
-        if (days > 0) return `${days}d ago`;
-        if (hours > 0) return `${hours}h ago`;
-        if (minutes > 0) return `${minutes}m ago`;
+            await Promise.all([
+                userRow?.codeforces_handle ? syncCodeforcesActivity(user.id, userRow.codeforces_handle) : Promise.resolve(),
+                userRow?.leetcode_username ? syncLeetCodeActivity(user.id, userRow.leetcode_username) : Promise.resolve(),
+                userRow?.github_username ? syncGitHubActivity(user.id, userRow.github_username) : Promise.resolve(),
+            ]);
+
+            const { data: fresh } = await supabase
+                .from('external_activity')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('activity_timestamp', { ascending: false })
+                .limit(60);
+
+            setActivities(fresh || []);
+            setSyncMsg('✓ Synced!');
+            setTimeout(() => setSyncMsg(''), 3000);
+        } catch {
+            setSyncMsg('Sync error');
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    const getTimeAgo = (ts: string) => {
+        const diff = Date.now() - new Date(ts).getTime();
+        const m = Math.floor(diff / 60000);
+        const h = Math.floor(m / 60);
+        const d = Math.floor(h / 24);
+        if (d > 0) return `${d}d ago`;
+        if (h > 0) return `${h}h ago`;
+        if (m > 0) return `${m}m ago`;
         return 'Just now';
     };
 
-    const getPlatformIcon = (source: string) => {
-        switch (source) {
-            case 'leetcode': return <Code2 size={14} />;
-            case 'codeforces': return <ActivityIcon size={14} />;
-            case 'github': return <GitCommit size={14} />;
-            default: return <BookOpen size={14} />;
+    const getPlatformConfig = (platform: string) => {
+        switch (platform) {
+            case 'Codeforces': return { icon: <Trophy size={14} />, color: 'text-yellow-400', border: 'border-yellow-400/20', bg: 'bg-yellow-400/5' };
+            case 'LeetCode': return { icon: <Code2 size={14} />, color: 'text-orange-400', border: 'border-orange-400/20', bg: 'bg-orange-400/5' };
+            case 'GitHub': return { icon: <Github size={14} />, color: 'text-blue-400', border: 'border-blue-400/20', bg: 'bg-blue-400/5' };
+            default: return { icon: <ActivityIcon size={14} />, color: 'text-brand-primary', border: 'border-brand-border', bg: 'bg-brand-card/50' };
         }
     };
 
-    const getPlatformColor = (source: string) => {
-        switch (source) {
-            case 'leetcode': return 'bg-orange-500/20 text-orange-400 border border-orange-500/50';
-            case 'codeforces': return 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50';
-            case 'github': return 'bg-brand-secondary/20 text-brand-secondary border border-brand-secondary/50';
-            default: return 'bg-green-500/20 text-green-400 border border-green-500/50';
-        }
+    const getDifficultyBadge = (metadata: any) => {
+        if (!metadata?.rating) return null;
+        const r = metadata.rating;
+        const diff = r > 1600 ? 'Hard' : r > 1200 ? 'Medium' : 'Easy';
+        const cls = r > 1600 ? 'text-red-400 border-red-400/30' : r > 1200 ? 'text-yellow-400 border-yellow-400/30' : 'text-green-400 border-green-400/30';
+        return <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${cls}`}>{diff} • {r}</span>;
     };
 
     return (
-        <div className="space-y-8 animate-fade-in pb-12">
-            <header className="mb-8 border-b border-brand-border pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div className="space-y-6 animate-fade-in pb-12">
+            <header className="mb-6 border-b border-brand-border pb-4 flex items-center justify-between">
                 <div>
-                    <h2 className="text-3xl font-bold retro-text tracking-widest uppercase mb-2 flex items-center gap-3">
-                        <ActivityIcon className="text-brand-accent" size={32} /> Unified Activity
+                    <h2 className="text-2xl font-bold retro-text tracking-widest uppercase mb-1 flex items-center gap-3">
+                        <Zap className="text-brand-accent" /> Unified Activity
                     </h2>
-                    <p className="retro-text-sub">Real-time timeline of your external engagements.</p>
+                    <p className="retro-text-sub">Real-time timeline of your external engagements</p>
                 </div>
+                <button
+                    onClick={handleManualSync}
+                    disabled={syncing}
+                    className="flex items-center gap-2 px-4 py-2 border border-brand-primary/30 text-brand-primary font-mono text-xs rounded hover:bg-brand-primary/10 transition-colors disabled:opacity-40"
+                >
+                    <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+                    {syncing ? 'Syncing...' : 'Refresh'}
+                </button>
             </header>
 
-            <div className="retro-panel pt-4 pb-0 overflow-hidden">
-                {isLoading ? (
-                    <div className="p-12 text-center text-brand-secondary/50">
-                        <ActivityIcon className="mx-auto block mb-4 animate-pulse" size={32} />
-                        <span className="font-mono tracking-widest uppercase">Fetching Time-Stream...</span>
-                    </div>
-                ) : activities.length === 0 ? (
-                    <div className="p-12 text-center text-brand-secondary flex flex-col items-center">
-                        <p className="font-mono text-sm mb-4">No external activity detected.</p>
-                        <button
-                            onClick={async () => {
-                                if (!user) return;
-                                setIsLoading(true);
-                                const { syncEngine } = await import('../core/syncEngine');
-                                await syncEngine(user.id);
-                                window.location.reload();
-                            }}
-                            className="px-4 py-2 bg-brand-accent/10 border border-brand-accent/50 text-brand-accent hover:bg-brand-accent hover:text-brand-bg transition-colors font-mono text-xs uppercase"
-                        >
-                            Run Sync Engine
-                        </button>
-                    </div>
-                ) : (
-                    <div className="relative border-l border-brand-border/30 ml-6 mb-6 mt-4">
-                        {activities.map((act) => (
-                            <div key={act.id} className="mb-8 ml-6 relative group">
-                                <span className={`absolute flex items-center justify-center w-8 h-8 rounded-full -left-10 ring-4 ring-brand-bg
-                                    ${getPlatformColor(act.source)}`}>
-                                    {getPlatformIcon(act.source)}
-                                </span>
+            {syncMsg && (
+                <div className="retro-panel p-3 border-brand-accent/20 bg-brand-accent/5 text-xs font-mono text-brand-accent">{syncMsg}</div>
+            )}
 
-                                <div className="p-4 border border-brand-border/20 rounded bg-brand-bg/30 hover:bg-brand-primary/5 transition-colors">
-                                    <div className="flex justify-between items-start mb-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-mono uppercase tracking-widest text-brand-secondary">
-                                                {act.source}
-                                            </span>
-                                            <span className="text-brand-primary font-bold font-mono text-sm">
-                                                {act.type === 'solve' && `Solved ${act.metadata?.title || 'a problem'}`}
-                                                {act.type === 'commit' && `Committed to ${act.metadata?.repo || 'a repository'}`}
-                                                {act.type === 'study' && `Studied ${act.metadata?.topic || 'a topic'}`}
-                                                {act.type === 'contest' && `Participated in contest`}
-                                            </span>
-                                        </div>
-                                        {act.metadata?.url && (
-                                            <a href={act.metadata.url} target="_blank" rel="noreferrer" className="text-brand-secondary hover:text-brand-primary transition-colors">
-                                                <ExternalLink size={14} />
-                                            </a>
-                                        )}
-                                    </div>
-                                    <div className="text-xs font-mono text-brand-secondary/50 mt-2 flex items-center gap-2">
-                                        <Zap size={10} className="text-brand-accent" />
-                                        {getTimeAgo(act.created_at)}
-                                        <span className="mx-1">•</span>
-                                        <span>{new Date(act.created_at).toLocaleString()}</span>
-                                    </div>
+            {isLoading ? (
+                <div className="retro-panel p-12 text-center">
+                    <ActivityIcon className="w-12 h-12 mx-auto text-brand-secondary/30 mb-4 animate-pulse" />
+                    <p className="text-brand-secondary font-mono text-sm uppercase tracking-widest">Scanning your activity...</p>
+                </div>
+            ) : activities.length === 0 ? (
+                <div className="retro-panel p-12 text-center border-brand-border/30">
+                    <Github className="w-12 h-12 mx-auto text-brand-secondary/30 mb-4" />
+                    <h3 className="text-brand-secondary font-mono uppercase tracking-widest mb-2">No Activity Found</h3>
+                    <p className="text-xs text-brand-secondary/50 font-mono mb-4">
+                        Connect your Codeforces, LeetCode, or GitHub handle in Profile first.
+                    </p>
+                    <a href="/profile" className="inline-flex items-center gap-2 px-4 py-2 border border-brand-primary/30 text-brand-primary font-mono text-xs rounded hover:bg-brand-primary/10 transition-colors">
+                        Go to Profile →
+                    </a>
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    {/* Platform summary bar */}
+                    <div className="flex gap-4 mb-4">
+                        {(['Codeforces', 'LeetCode', 'GitHub'] as const).map(p => {
+                            const count = activities.filter(a => a.platform === p).length;
+                            const cfg = getPlatformConfig(p);
+                            if (count === 0) return null;
+                            return (
+                                <div key={p} className={`flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-mono ${cfg.color} ${cfg.border} ${cfg.bg}`}>
+                                    {cfg.icon} {p}: {count} events
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
-                )}
-            </div>
+
+                    {/* Activity timeline */}
+                    <div className="relative">
+                        <div className="absolute left-6 top-0 bottom-0 w-px bg-brand-border/30" />
+                        <div className="space-y-2">
+                            {activities.map((act, i) => {
+                                const cfg = getPlatformConfig(act.platform);
+                                return (
+                                    <div key={act.id || i} className="relative pl-14">
+                                        <div className={`absolute left-4 top-4 w-4 h-4 rounded-full border-2 flex items-center justify-center border-brand-bg ${cfg.color} bg-brand-bg`}
+                                            style={{ fontSize: '9px' }}>
+                                            {cfg.icon}
+                                        </div>
+                                        <div className={`retro-panel p-4 border transition-colors group ${cfg.border} hover:brightness-110`}>
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                        <span className={`text-[10px] font-mono font-bold uppercase tracking-widest ${cfg.color}`}>{act.platform}</span>
+                                                        {getDifficultyBadge(act.metadata)}
+                                                        {act.metadata?.tags?.slice(0, 2).map((t: string) => (
+                                                            <span key={t} className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-brand-border/30 text-brand-secondary/60">{t}</span>
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-sm font-mono text-brand-primary font-medium truncate">{act.activity_title}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                    <span className="text-[10px] font-mono text-brand-secondary/50 whitespace-nowrap">{getTimeAgo(act.activity_timestamp)}</span>
+                                                    {act.activity_link && (
+                                                        <a href={act.activity_link} target="_blank" rel="noreferrer"
+                                                            className="text-brand-secondary/30 hover:text-brand-primary transition-colors">
+                                                            <ExternalLink size={12} />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
