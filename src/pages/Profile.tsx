@@ -171,7 +171,10 @@ export const Profile: React.FC = () => {
                     <div className="space-y-1">
                         <label className="flex items-center justify-between text-xs font-mono text-brand-secondary uppercase tracking-widest">
                             <span className="flex items-center gap-2"><Trophy size={15} className="text-yellow-400" /> Codeforces Handle</span>
-                            {externalStats?.cf && <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>}
+                            {externalStats?.cf
+                                ? <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>
+                                : cfHandle.trim() && <span className="text-red-400/70 text-[10px] flex items-center gap-1">⚠ Not fetched — click Connect</span>
+                            }
                         </label>
                         <div className="flex gap-2">
                             <input value={cfHandle} onChange={e => setCfHandle(e.target.value)} placeholder="tourist"
@@ -179,14 +182,24 @@ export const Profile: React.FC = () => {
                             <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
                                 className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
                         </div>
-                        {externalStats?.cf && <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">{externalStats.cf.rating} Rating • {externalStats.cf.problemsSolved} Solved</div>}
+                        {externalStats?.cf
+                            ? <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">
+                                {externalStats.cf.rating} Rating · {externalStats.cf.rank} · {externalStats.cf.problemsSolved} Solved
+                            </div>
+                            : cfHandle.trim() && <div className="text-xs font-mono text-brand-secondary/50 mt-1 ml-1">
+                                Handle saved. Click Connect to verify and fetch rating.
+                            </div>
+                        }
                     </div>
 
                     {/* LeetCode */}
                     <div className="space-y-1">
                         <label className="flex items-center justify-between text-xs font-mono text-brand-secondary uppercase tracking-widest">
                             <span className="flex items-center gap-2"><Code2 size={15} className="text-orange-400" /> LeetCode Username</span>
-                            {externalStats?.lc && <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>}
+                            {externalStats?.lc
+                                ? <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>
+                                : lcUsername.trim() && <span className="text-red-400/70 text-[10px] flex items-center gap-1">⚠ Not fetched — click Connect</span>
+                            }
                         </label>
                         <div className="flex gap-2">
                             <input value={lcUsername} onChange={e => setLcUsername(e.target.value)} placeholder="neal_wu"
@@ -194,14 +207,23 @@ export const Profile: React.FC = () => {
                             <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
                                 className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
                         </div>
-                        {externalStats?.lc && <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">{externalStats.lc.totalSolved} Problems Solved • Top {(100 - (externalStats.lc.ranking / 100000)).toFixed(1)}%</div>}
+                        {externalStats?.lc && (
+                            <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">
+                                {externalStats.lc.totalSolved} Solved
+                                {externalStats.lc.easySolved > 0 && <> · Easy {externalStats.lc.easySolved} · Med {externalStats.lc.mediumSolved} · Hard {externalStats.lc.hardSolved}</>}
+                                {externalStats.lc.ranking > 0 && <> · Rank #{externalStats.lc.ranking.toLocaleString()}</>}
+                            </div>
+                        )}
                     </div>
 
                     {/* GitHub */}
                     <div className="space-y-1">
                         <label className="flex items-center justify-between text-xs font-mono text-brand-secondary uppercase tracking-widest">
                             <span className="flex items-center gap-2"><Github size={15} className="text-blue-400" /> GitHub Username</span>
-                            {externalStats?.gh && <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>}
+                            {externalStats?.gh
+                                ? <span className="text-green-400 flex items-center gap-1"><Check size={12} /> Connected</span>
+                                : ghUsername.trim() && <span className="text-red-400/70 text-[10px] flex items-center gap-1">⚠ Not fetched — click Connect</span>
+                            }
                         </label>
                         <div className="flex gap-2">
                             <input value={ghUsername} onChange={e => setGhUsername(e.target.value)} placeholder="torvalds"
@@ -209,7 +231,17 @@ export const Profile: React.FC = () => {
                             <button onClick={() => saveHandles()} disabled={savingHandles || syncing}
                                 className="px-4 bg-brand-primary/10 border border-brand-primary/40 text-brand-primary font-mono text-sm rounded hover:bg-brand-primary/20 transition-colors disabled:opacity-50 uppercase">Connect</button>
                         </div>
-                        {externalStats?.gh && <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">{externalStats.gh.publicRepos} Repositories • {externalStats.gh.lastMonthCommits} Commits (30d)</div>}
+                        {externalStats?.gh && (
+                            <div className="text-xs font-mono text-brand-primary/80 mt-1 ml-1">
+                                {externalStats.gh.publicRepos} Repos
+                                {externalStats.gh.totalCommitsEstimate > 0
+                                    ? <> · {externalStats.gh.totalCommitsEstimate} Commits (90d)</>
+                                    : externalStats.gh.lastMonthCommits > 0
+                                        ? <> · {externalStats.gh.lastMonthCommits} Commits (30d)</>
+                                        : <> · No recent public commits</>}
+                                {externalStats.gh.followers > 0 && <> · {externalStats.gh.followers} Followers</>}
+                            </div>
+                        )}
                     </div>
 
                     {syncMsg && (
