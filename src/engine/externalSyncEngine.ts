@@ -26,29 +26,54 @@ interface Handles {
     github_username: string;
 }
 
+// ─── LocalStorage cache key ───────────────────────────────────────────────────
+const cacheKey = (userId: string) => `devtrack_ext_stats_${userId}`;
+
+function saveStatsToCache(userId: string, stats: ExternalStats): void {
+    try { localStorage.setItem(cacheKey(userId), JSON.stringify(stats)); } catch { }
+}
+
+function loadStatsFromCache(userId: string): ExternalStats | null {
+    try {
+        const raw = localStorage.getItem(cacheKey(userId));
+        if (!raw) return null;
+        return JSON.parse(raw) as ExternalStats;
+    } catch { return null; }
+}
+
 // ─── Load all external stats (localStorage cache first, then Supabase) ────────
 export async function loadExternalStats(userId: string): Promise<ExternalStats> {
-    const supabase = await getSupabaseClient();
-    if (!supabase) return { cf: null, lc: null, gh: null, lastSynced: null };
+    // 1. Try localStorage first — instant, survives refresh, no network needed
+    const cached = loadStatsFromCache(userId);
+    if (cached && (cached.cf || cached.lc || cached.gh)) {
+        // If not stale, return immediately — no Supabase call
+        if (!isStale(cached.lastSynced ?? 0)) return cached;
+    }
 
-    let result: ExternalStats = { cf: null, lc: null, gh: null, lastSynced: null };
+    // 2. Try Supabase
+    const supabase = await getSupabaseClient();
+    if (!supabase) return cached ?? { cf: null, lc: null, gh: null, lastSynced: null };
+
     try {
         const { data, error } = await supabase
             .from('external_stats')
             .select('cf, lc, gh, last_synced')
             .eq('user_id', userId)
             .single();
-        if (!error && data) {
-            result = {
+        if (!error && data && (data.cf || data.lc || data.gh)) {
+            const result: ExternalStats = {
                 cf: data.cf,
                 lc: data.lc,
                 gh: data.gh,
                 lastSynced: new Date(data.last_synced).getTime()
             };
+            saveStatsToCache(userId, result); // keep cache in sync
+            return result;
         }
     } catch { }
 
-    return result;
+    // 3. Fall back to cached even if stale — better than nothing
+    return cached ?? { cf: null, lc: null, gh: null, lastSynced: null };
 }
 
 // ─── Get handles from Supabase with localStorage fallback ─────────────────────
@@ -159,6 +184,8 @@ export async function syncExternalStats(
     }
 
     const result: ExternalStats = { cf, lc, gh, lastSynced: Date.now() };
+    // Always persist to localStorage — this survives refresh even if Supabase is unavailable
+    saveStatsToCache(userId, result);
     return result;
 }
 
