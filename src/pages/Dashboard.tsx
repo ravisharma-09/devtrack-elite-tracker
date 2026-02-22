@@ -3,6 +3,7 @@ import { useStore } from '../engine/learningStore';
 import { useAuth } from '../auth/AuthContext';
 import { AddStudySessionModal } from '../components/AddStudySessionModal';
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
+import { AnimatedProgressGraph } from '../components/AnimatedProgressGraph';
 import { getSupabaseClient } from '../backend/supabaseClient';
 import { Link } from 'react-router-dom';
 import { RetroLoader } from '../components/RetroLoader';
@@ -233,6 +234,9 @@ export const Dashboard: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* ANIMATED PROGRESS GRAPH */}
+            <AnimatedProgressGraph activityHistory={activityHistory} daysToView={14} />
 
             {/* RECENT EXTERNAL ACTIVITY */}
             <div className="retro-panel p-6">
