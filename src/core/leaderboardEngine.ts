@@ -42,3 +42,6 @@ export async function leaderboardEngine(): Promise<void> {
         console.error("Leaderboard Engine Execution Failed:", e);
     }
 }
+
+export { leaderboardEngine as runLeaderboardEngine };
+

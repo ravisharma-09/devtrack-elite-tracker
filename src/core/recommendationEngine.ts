@@ -10,7 +10,7 @@ export async function addRec(supabase: any, user_id: string, type: string, title
 }
 
 export async function recommendationEngine(userIdParam: string): Promise<void> {
-    console.log("Generating recommendations");
+    console.log("🧩 Generating Recommendations...");
     const supabase = await getSupabaseClient();
     if (!supabase) return;
 
@@ -22,7 +22,6 @@ export async function recommendationEngine(userIdParam: string): Promise<void> {
     }
 
     try {
-        console.log("🧩 Generating Recommendations...");
         // Clear old recommendations
         await supabase.from('recommendations').delete().eq('user_id', verifiedUserId);
 
@@ -47,33 +46,41 @@ export async function recommendationEngine(userIdParam: string): Promise<void> {
             .eq('user_id', verifiedUserId)
             .single();
 
-        const weakTopics = profile?.weak_topics || [];
-        const learningTopics = roadmap?.map((r: any) => r.topic_id?.toLowerCase() || '')?.filter(Boolean) || [];
-        const cfRating = profile?.cf_rating || 800;
+        const weakTopics: string[] = profile?.weak_topics || [];
+        const learningTopics: string[] = roadmap?.map((r: any) => r.topic_id?.toLowerCase() || '')?.filter(Boolean) || [];
+        const cfRating: number = profile?.cf_rating || 800;
 
-        // 1. Dynamic Curated Logic (from Problem Bank + TSA engine weak topics)
+        // ── 1. DSA PROBLEMS ─────────────────────────────────────────────────
+        // Find problems near the user's CF rating (+/- 200), fallback to all rating=800 problems
+        let availableProblems = (problemBank as any[]).filter(
+            p => p.rating >= cfRating - 100 && p.rating <= cfRating + 200
+        );
 
-        // Filter problem bank near user's skill rating (+/- 200)
-        let availableProblems = problemBank.filter(p => p.rating >= cfRating - 100 && p.rating <= cfRating + 200);
-
-        // If they are too low, give absolute basics
         if (availableProblems.length === 0) {
-            availableProblems = problemBank.filter(p => p.rating === 800);
+            // Ultimate fallback — grab all beginner problems
+            availableProblems = (problemBank as any[]).filter(p => p.rating <= 900);
         }
 
-        // Try to find problems matching weak topics first
+        // Prefer weak topic matches, then fill with general problems
         const weakMatches = availableProblems.filter(p => weakTopics.includes(p.topic));
+        const nonWeakMatches = availableProblems.filter(p => !weakTopics.includes(p.topic));
 
-        let selectedAlgorithms = [];
-        if (weakMatches.length >= 3) {
-            // Take top 3
-            selectedAlgorithms = weakMatches.slice(0, 3);
-        } else {
-            // Mix weak matches with general appropriate rating matches
-            selectedAlgorithms = [...weakMatches];
-            const remainingNeeded = 3 - selectedAlgorithms.length;
-            const nonWeakMatches = availableProblems.filter(p => !weakTopics.includes(p.topic));
+        const selectedAlgorithms: any[] = [...weakMatches.slice(0, 3)];
+        const remainingNeeded = 3 - selectedAlgorithms.length;
+        if (remainingNeeded > 0) {
             selectedAlgorithms.push(...nonWeakMatches.slice(0, remainingNeeded));
+        }
+
+        // Absolute fallback — always have at least 3 DSA cards
+        const hardcodedStarters = [
+            { name: 'Watermelon', link: 'https://codeforces.com/problemset/problem/4/A', topic: 'Math', rating: 800 },
+            { name: 'Way Too Long Words', link: 'https://codeforces.com/problemset/problem/71/A', topic: 'Strings', rating: 800 },
+            { name: 'Team', link: 'https://codeforces.com/problemset/problem/231/A', topic: 'Greedy', rating: 800 },
+        ];
+        while (selectedAlgorithms.length < 3) {
+            const fill = hardcodedStarters[selectedAlgorithms.length];
+            if (fill) selectedAlgorithms.push(fill);
+            else break;
         }
 
         for (const prob of selectedAlgorithms) {
@@ -81,45 +88,45 @@ export async function recommendationEngine(userIdParam: string): Promise<void> {
             await addRec(supabase, verifiedUserId, 'dsa', prob.name, `Targeted practice for ${prob.topic} at rating ${prob.rating}.`, prob.link, prob.topic, diff);
         }
 
-
-        // Roadmap Projects (Web Dev)
+        // ── 2. WEB PROJECTS ─────────────────────────────────────────────────
+        // Always add at least one webdev card for new users
+        let addedWebdev = false;
         for (const topic of learningTopics) {
             if (topic.includes('dom')) {
                 await addRec(supabase, verifiedUserId, 'webdev', 'Todo App', 'Master DOM manipulation.', 'https://github.com/topics/todo-app', 'DOM', 'Medium');
-                break; // Just one project is enough usually
+                addedWebdev = true; break;
             } else if (topic.includes('fetch')) {
                 await addRec(supabase, verifiedUserId, 'webdev', 'Weather App', 'Master APIs.', 'https://github.com/topics/weather-app', 'Fetch API', 'Medium');
-                break;
+                addedWebdev = true; break;
             } else if (topic.includes('react')) {
                 await addRec(supabase, verifiedUserId, 'webdev', 'Blog App', 'Master State and Props.', 'https://github.com/topics/react-blog', 'React', 'Hard');
-                break;
+                addedWebdev = true; break;
             } else if (topic.includes('hooks')) {
                 await addRec(supabase, verifiedUserId, 'webdev', 'Dashboard Clone', 'Master custom hooks.', 'https://github.com/topics/react-dashboard', 'React Hooks', 'Hard');
-                break;
+                addedWebdev = true; break;
             }
         }
-
-        // Open Source
-        await addRec(supabase, verifiedUserId, 'opensource', 'First Contributions', 'Great place for beginners to make PRs.', 'https://github.com/firstcontributions/first-contributions', 'Git', 'Easy');
-
-        // 2. AI Smart Engine execution
-        // We run this alongside the static to get the highly tailored recommendations into AI textual cache
-        await runAIEngine(verifiedUserId, profile, learningTopics, externalStats);
-
-        // 3. Last chance fallback check to guarantee UI isn't empty
-        const { data: verifyData } = await supabase
-            .from("recommendations")
-            .select("*")
-            .eq("user_id", verifiedUserId);
-
-        if (!verifyData || verifyData.length === 0) {
-            console.log("⚠️ Fallback: Still empty... generating new recommendations");
-            await addRec(supabase, verifiedUserId, 'dsa', 'Watermelon', 'A classic introductory problem.', 'https://codeforces.com/problemset/problem/4/A', 'Math', 'Easy');
+        // Default webdev card for users with no roadmap progress yet
+        if (!addedWebdev) {
+            await addRec(supabase, verifiedUserId, 'webdev', 'Portfolio Website', 'Build your first personal portfolio with HTML, CSS and JS.', 'https://github.com/topics/portfolio', 'HTML/CSS', 'Easy');
         }
+
+        // ── 3. OPEN SOURCE ──────────────────────────────────────────────────
+        await addRec(supabase, verifiedUserId, 'opensource', 'First Contributions', 'Perfect place for beginners to make their first open-source PR.', 'https://github.com/firstcontributions/first-contributions', 'Git', 'Easy');
+        await addRec(supabase, verifiedUserId, 'opensource', 'Good First Issues', 'Browse open issues labeled good-first-issue across GitHub.', 'https://goodfirstissues.com', 'Open Source', 'Easy');
+
+        // ── 4. AI ANALYSIS ──────────────────────────────────────────────────
+        try {
+            await runAIEngine(verifiedUserId, profile, learningTopics, externalStats);
+        } catch (aiErr) {
+            console.warn("AI Engine skipped (non-critical):", aiErr);
+        }
+
+        console.log("✅ Recommendation Engine Completed");
 
     } catch (e) {
         console.error('[DevTrack Core] Recommendation Engine failed:', e);
     }
 }
 
-
+export { recommendationEngine as runRecommendationEngine };

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Brain, Code2, Target, ExternalLink, Zap, Terminal, LayoutTemplate, Github, FolderGit2, MessageSquareText } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
+import { recommendationEngine } from '../core/recommendationEngine';
 
 type TabType = 'dsa' | 'opensource' | 'webdev';
 
@@ -15,11 +16,8 @@ export const Suggestions: React.FC = () => {
     useEffect(() => {
         if (!user) return;
         let mounted = true;
-        let isGenerating = false;
 
         const fetchRecs = async () => {
-            if (isGenerating) return;
-            setLoading(true);
             const supabase = await getSupabaseClient();
             if (!supabase) {
                 if (mounted) setLoading(false);
@@ -33,6 +31,21 @@ export const Suggestions: React.FC = () => {
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false });
 
+            // If no recommendations exist, run the engine to generate them
+            if (!recError && (!recData || recData.length === 0)) {
+                console.log('⚡ No recommendations found — triggering engine...');
+                await recommendationEngine(user.id);
+                // Refetch after engine runs
+                const { data: fresh } = await supabase
+                    .from('recommendations')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false });
+                if (mounted) setRecommendations(fresh || []);
+            } else {
+                if (mounted) setRecommendations(recData || []);
+            }
+
             // Fetch AI textual analysis
             const { data: cacheData, error: cacheError } = await supabase
                 .from('ai_analytics_cache')
@@ -41,13 +54,6 @@ export const Suggestions: React.FC = () => {
                 .single();
 
             if (mounted) {
-                if (recError) {
-                    console.error('Error fetching recommendations:', recError);
-                    setRecommendations([]);
-                } else {
-                    setRecommendations(recData || []);
-                }
-
                 if (!cacheError && cacheData?.suggestions?.targeted_practice_analysis) {
                     setAnalysis(cacheData.suggestions.targeted_practice_analysis);
                 }
@@ -55,21 +61,15 @@ export const Suggestions: React.FC = () => {
             }
         };
 
-        const load = async () => {
-            await fetchRecs();
-        };
-
-        load();
+        fetchRecs();
 
         getSupabaseClient().then(supabase => {
             if (!supabase) return;
-            // Listen for card inserts
             const subRecs = supabase.channel('recs-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'recommendations', filter: `user_id=eq.${user.id}` }, () => {
                     if (mounted) fetchRecs();
                 }).subscribe();
 
-            // Listen for AI text updates
             const subCache = supabase.channel('cache-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_analytics_cache', filter: `user_id=eq.${user.id}` }, () => {
                     if (mounted) fetchRecs();
