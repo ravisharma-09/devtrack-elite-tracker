@@ -25,6 +25,23 @@ const STARTER_WEBDEV = [
     { name: 'Weather App', description: 'Learn to use APIs by building a weather dashboard.', link: 'https://github.com/topics/weather-app', topic: 'Fetch API', difficulty: 'Medium' },
 ];
 
+function getInMemoryFallback(profile: any): any[] {
+    const cfRating: number = profile?.cf_rating || 800;
+    const weakTopics: string[] = profile?.weak_topics || [];
+    let pool = (problemBank as any[]).filter(p => p.rating >= cfRating - 100 && p.rating <= cfRating + 300);
+    if (pool.length === 0) pool = (problemBank as any[]).filter(p => p.rating <= 900);
+    if (pool.length === 0) pool = STARTER_DSA;
+    const byWeak = pool.filter(p => weakTopics.includes(p.topic));
+    const byGeneral = pool.filter(p => !weakTopics.includes(p.topic));
+    const selected = [...byWeak.slice(0, 3), ...byGeneral.slice(0, 3 - byWeak.slice(0, 3).length)];
+    while (selected.length < 3) selected.push(STARTER_DSA[selected.length % STARTER_DSA.length]);
+    return [
+        ...selected.map(p => ({ type: 'dsa', content: { title: p.name, description: 'Practice ' + p.topic + ' at rating ' + p.rating + '.', link: p.link, topic: p.topic, difficulty: p.rating > 1400 ? 'Hard' : p.rating > 1000 ? 'Medium' : 'Easy' } })),
+        ...STARTER_OPENSOURCE.map(o => ({ type: 'opensource', content: o })),
+        ...STARTER_WEBDEV.map(w => ({ type: 'webdev', content: w })),
+    ];
+}
+
 async function insertStarterRecs(supabase: any, userId: string, profile: any): Promise<void> {
     const cfRating: number = profile?.cf_rating || 800;
     const weakTopics: string[] = profile?.weak_topics || [];
@@ -72,46 +89,59 @@ export const Suggestions: React.FC = () => {
 
         const load = async () => {
             setLoading(true);
-            const supabase = await getSupabaseClient();
-            if (!supabase) { if (mounted) setLoading(false); return; }
+            try {
+                const supabase = await getSupabaseClient();
+                if (!supabase) return;
 
-            // 1. Fetch existing recs
-            const { data: recData } = await supabase
-                .from('recommendations')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false });
-
-            // 2. If DB has recs, show them immediately
-            if (recData && recData.length > 0) {
-                if (mounted) { setRecommendations(recData); setLoading(false); }
-            } else {
-                // 3. DB empty — fetch profile then insert starters directly (no engine needed)
-                console.log('⚡ Empty DB — inserting starter recommendations directly...');
-                const { data: profile } = await supabase
-                    .from('profiles').select('cf_rating, weak_topics').eq('id', user.id).single();
-
-                await insertStarterRecs(supabase, user.id, profile);
-
-                // 4. Refetch
-                const { data: fresh } = await supabase
+                // 1. Fetch existing recs
+                const { data: recData } = await supabase
                     .from('recommendations')
                     .select('*')
                     .eq('user_id', user.id)
                     .order('created_at', { ascending: false });
 
-                if (mounted) { setRecommendations(fresh || []); setLoading(false); }
-            }
+                if (recData && recData.length > 0) {
+                    if (mounted) setRecommendations(recData);
+                } else {
+                    // 2. DB is empty — fetch profile for personalisation
+                    console.log('⚡ Empty DB — inserting starter recs...');
+                    const { data: profile } = await supabase
+                        .from('profiles').select('cf_rating, weak_topics').eq('id', user.id).single();
 
-            // 5. Fetch AI analysis text (non-blocking)
-            const { data: cacheData } = await supabase
-                .from('ai_analytics_cache')
-                .select('suggestions')
-                .eq('user_id', user.id)
-                .single();
+                    // 3. Try to insert to DB, but don't block rendering if it fails
+                    try {
+                        await insertStarterRecs(supabase, user.id, profile);
+                        const { data: fresh } = await supabase
+                            .from('recommendations').select('*')
+                            .eq('user_id', user.id).order('created_at', { ascending: false });
+                        if (mounted && fresh && fresh.length > 0) {
+                            setRecommendations(fresh);
+                        } else {
+                            // DB write failed or still empty — render in-memory fallback
+                            if (mounted) setRecommendations(getInMemoryFallback(profile));
+                        }
+                    } catch (insertErr) {
+                        console.warn('DB insert failed, using in-memory fallback:', insertErr);
+                        if (mounted) setRecommendations(getInMemoryFallback(profile));
+                    }
+                }
 
-            if (mounted && cacheData?.suggestions?.targeted_practice_analysis) {
-                setAnalysis(cacheData.suggestions.targeted_practice_analysis);
+                // AI analysis text (non-blocking)
+                try {
+                    const { data: cacheData } = await supabase
+                        .from('ai_analytics_cache').select('suggestions')
+                        .eq('user_id', user.id).single();
+                    if (mounted && cacheData?.suggestions?.targeted_practice_analysis) {
+                        setAnalysis(cacheData.suggestions.targeted_practice_analysis);
+                    }
+                } catch (_) { /* analytics cache missing is fine */ }
+
+            } catch (e) {
+                console.error('Suggestions load error:', e);
+                // Last resort — show hardcoded in-memory cards so page is never blank
+                if (mounted) setRecommendations(getInMemoryFallback(null));
+            } finally {
+                if (mounted) setLoading(false);
             }
         };
 
