@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { signIn, signUp, signOut, onAuthStateChange } from './authService';
+import { signIn, signUp, signOut } from './authService';
 import { isSupabaseConfigured } from '../backend/supabaseClient';
 import { runBackgroundSync } from '../core/backgroundSync';
 
@@ -71,22 +71,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         let unsubscribe = () => { };
+        let mounted = true;
 
-        onAuthStateChange(async rawUser => {
-            if (rawUser) {
-                const authUser = normalise(rawUser);
-                setUser(authUser);
-                setIsLoading(false);
-                // Load data from Supabase and hydrate localStorage
-                await hydrateUser(authUser);
-            } else {
-                setUser(null);
-                setIsLoading(false);
-                setIsDataReady(true); // No user — /login page can render immediately
+        const initAuth = async () => {
+            try {
+                const { getSupabaseClient } = await import('../backend/supabaseClient');
+                const supabase = await getSupabaseClient();
+                if (!supabase || !mounted) return;
+
+                // 1. Explicitly check for an existing session first
+                const { data: { session } } = await supabase.auth.getSession();
+
+                if (session?.user) {
+                    const authUser = normalise(session.user);
+                    setUser(authUser);
+                    setIsLoading(false);
+                    await hydrateUser(authUser);
+                } else {
+                    setUser(null);
+                    setIsLoading(false);
+                    setIsDataReady(true);
+                }
+
+                // 2. Listen for future changes (login, logout, token refresh)
+                const { data: listener } = supabase.auth.onAuthStateChange(async (event: string, newSession: any) => {
+                    if (!mounted) return;
+
+                    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+                        if (newSession?.user) {
+                            const authUser = normalise(newSession.user);
+                            setUser(authUser);
+                            // Avoid re-hydrating if we already did it on mount, unless it's a new login
+                            if (!isDataReady || event === 'SIGNED_IN') {
+                                await hydrateUser(authUser);
+                            }
+                        }
+                    } else if (event === 'SIGNED_OUT') {
+                        setUser(null);
+                        setIsDataReady(true);
+                    }
+                });
+
+                unsubscribe = () => {
+                    listener?.subscription?.unsubscribe();
+                };
+
+            } catch (err) {
+                console.error("[DevTrack Auth] Error restoring session:", err);
+                if (mounted) {
+                    setIsLoading(false);
+                    setIsDataReady(true);
+                }
             }
-        }).then(fn => { unsubscribe = fn; });
+        };
 
-        return () => unsubscribe();
+        initAuth();
+
+        return () => {
+            mounted = false;
+            unsubscribe();
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
