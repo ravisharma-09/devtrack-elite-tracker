@@ -16,7 +16,7 @@ async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promis
 }
 
 // ─── Hydrate roadmap from DB records ─────────────────────────────────────────
-function buildHydratedRoadmap(
+export function buildHydratedRoadmap(
     roadmapProgress: any[],
     microTaskProgress: any[]
 ): RoadmapCategory[] {
@@ -52,7 +52,7 @@ function buildHydratedRoadmap(
 }
 
 // ─── Recompute statistics from raw data ───────────────────────────────────────
-function buildStatistics(sessions: StudySession[], roadmap: RoadmapCategory[]): Statistics {
+export function buildStatistics(sessions: StudySession[], roadmap: RoadmapCategory[]): Statistics {
     const total = sessions.reduce((a, s) => ({ min: a.min + s.durationMinutes, count: a.count + 1 }), { min: 0, count: 0 });
     const completedTopics = roadmap.reduce((a, c) => a + c.topics.filter(t => t.completed).length, 0);
     const completedMicro = roadmap.reduce((a, c) =>

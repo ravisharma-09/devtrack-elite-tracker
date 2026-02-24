@@ -18,7 +18,7 @@ export const Dashboard: React.FC = () => {
     const [isLoadingAI, setIsLoadingAI] = useState(false);
     const [recentActivities, setRecentActivities] = useState<any[]>([]);
     const [profile, setProfile] = useState<any>(null);
-    const [todayStudyMinutes, setTodayStudyMinutes] = useState(0);
+
 
     const currentDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
     const todayTasks = (timetable[currentDayIndex]?.tasks || []) as any[];
@@ -55,12 +55,7 @@ export const Dashboard: React.FC = () => {
             }
 
             if (mounted && intRes.data) {
-                // Calculate today's manual study minutes
-                const today = new Date().toISOString().split('T')[0];
-                const todayMins = intRes.data
-                    .filter((a: any) => a.type === 'study' && a.created_at.startsWith(today))
-                    .reduce((acc: any, curr: any) => acc + (curr.score || 0), 0);
-                setTodayStudyMinutes(todayMins);
+                // Internal activities handle logic (empty for now without study sessions)
             }
 
             // Sync AI Analytics dynamically
@@ -143,6 +138,11 @@ export const Dashboard: React.FC = () => {
         mostFocused = activeCategories[0][0];
         leastFocused = activeCategories[activeCategories.length - 1][0];
     }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStudyMinutes = studySessions
+        .filter(s => new Date(s.timestamp).toISOString().split('T')[0] === todayStr || s.date === todayStr)
+        .reduce((acc, curr) => acc + curr.durationMinutes, 0);
 
     let weeklyPlannedMinutes = 0;
     let weeklyCompletedMinutes = 0;

@@ -20,11 +20,79 @@ export interface AIAnalyticsPayload {
 }
 
 // ─── Auto-wired hook — use this in all pages ──────────────────────────────────
+import React, { createContext, useContext, useEffect } from 'react';
+import { getSupabaseClient } from '../backend/supabaseClient';
+
+const LearningContext = createContext<ReturnType<typeof useLearningStoreBase> | null>(null);
+
+export const LearningProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { user } = useAuth();
+    const store = useLearningStoreBase(user?.id || 'local');
+
+    useEffect(() => {
+        if (!user?.id) return;
+        let mounted = true;
+
+        const hydrate = async () => {
+            const supabase = await getSupabaseClient();
+            if (!supabase) return;
+
+            const [sessionsRes, timetableRes, activityRes, roadmapRes, microRes] = await Promise.all([
+                supabase.from('study_sessions').select('*').eq('user_id', user.id),
+                supabase.from('user_timetable').select('*').eq('user_id', user.id).maybeSingle(),
+                supabase.from('activity_log').select('*').eq('user_id', user.id),
+                supabase.from('roadmap_progress').select('*').eq('user_id', user.id),
+                supabase.from('microtask_progress').select('*').eq('user_id', user.id)
+            ]);
+
+            if (!mounted) return;
+
+            let hydratedSessions: StudySession[] = [];
+            if (sessionsRes.data) {
+                hydratedSessions = sessionsRes.data.map((r: any) => ({
+                    id: r.id, topic: r.topic, category: r.category,
+                    durationMinutes: r.duration_minutes, difficulty: r.difficulty || 'Medium',
+                    notes: r.notes || '', date: r.date,
+                    timestamp: new Date(r.created_at).getTime(),
+                }));
+                store.setStudySessions(hydratedSessions);
+            }
+
+            if (timetableRes.data && timetableRes.data.schedule) {
+                store.setTimetable(timetableRes.data.schedule);
+            }
+
+            if (activityRes.data) {
+                const activityLog: ActivityHistory = {};
+                activityRes.data.forEach((r: any) => {
+                    activityLog[r.date] = { minutesStudied: r.minutes_studied, tasksCompleted: r.tasks_completed, topics: r.topics || [] };
+                });
+                store.setActivityHistory(activityLog);
+            }
+
+            import('./syncEngine').then(({ buildHydratedRoadmap, buildStatistics }) => {
+                const hydratedRoadmap = buildHydratedRoadmap(roadmapRes.data || [], microRes.data || []);
+                store.setRoadmap(hydratedRoadmap);
+                const stats = buildStatistics(hydratedSessions, hydratedRoadmap);
+                store.setStatistics(stats);
+            });
+        };
+
+        hydrate();
+
+        return () => { mounted = false; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id]);
+
+    return React.createElement(LearningContext.Provider, { value: store }, children);
+};
+
 // Automatically picks up the logged-in user's ID from AuthContext so every page
 // reads/writes the correct user's Supabase-backed data without passing userId.
 export function useStore() {
-    const { user } = useAuth();
-    return useLearningStore(user?.id || 'local');
+    const ctx = useContext(LearningContext);
+    if (!ctx) throw new Error('useStore must be used inside <LearningProvider>');
+    return ctx;
 }
 
 
@@ -38,9 +106,7 @@ export interface AIRecommendation {
 }
 
 // ─── Central Store Hook ───────────────────────────────────────────────────────
-// NOTE: By the time this hook mounts, AuthContext has already hydrated localStorage
-// from Supabase via loadAndHydrate(). So localStorage IS the Supabase data.
-export function useLearningStore(userId = 'local') {
+function useLearningStoreBase(userId = 'local') {
 
     const [roadmap, setRoadmap] = useState<RoadmapCategory[]>(initialRoadmap);
     const [studySessions, setStudySessions] = useState<StudySession[]>([]);
@@ -91,7 +157,10 @@ export function useLearningStore(userId = 'local') {
         });
 
         // ✅ Sync to Supabase (fire-and-forget; localStorage is already updated)
-        syncSession(newSession, userId).catch(() => { });
+        syncSession(newSession, userId).then(() => {
+            // Trigger background sync to immediately update global stats (skill_score, profiles)
+            import('../core/backgroundSync').then(m => m.runBackgroundSync(userId, true));
+        }).catch(() => { });
         if (newActivity[today]) {
             syncActivityLog(today, newActivity[today], userId).catch(() => { });
         }

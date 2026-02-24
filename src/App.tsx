@@ -110,10 +110,14 @@ function AppContent() {
   );
 }
 
+import { LearningProvider } from './engine/learningStore';
+
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <LearningProvider>
+        <AppContent />
+      </LearningProvider>
     </AuthProvider>
   );
 }
