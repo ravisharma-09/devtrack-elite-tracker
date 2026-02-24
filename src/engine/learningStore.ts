@@ -185,9 +185,22 @@ export function useLearningStore(userId = 'local') {
         setAiAnalytics(null);
     };
 
+    // ── ACTION: Complete/Uncomplete Timetable Task ──────────────────────────────
+    const setTimetableTaskCompleted = (dayIndex: number, taskId: string) => {
+        setTimetable(prev => {
+            const next = JSON.parse(JSON.stringify(prev));
+            if (!next[dayIndex]) return prev;
+            const task = next[dayIndex].tasks.find((t: any) => t.id === taskId);
+            if (task) {
+                task.completed = !task.completed;
+            }
+            return next;
+        });
+    };
+
     return {
         roadmap, studySessions, activityHistory, statistics, aiRecommendation, externalStats, aiAnalytics, timetable,
-        addStudySession, completeMicroTask, updateTopicProgress, storeAIRecommendation, clearStore,
+        addStudySession, completeMicroTask, updateTopicProgress, storeAIRecommendation, clearStore, setTimetableTaskCompleted,
         setRoadmap, setStatistics, setActivityHistory, setExternalStats, setAiAnalytics, setTimetable, setAIRecommendation, setStudySessions
     };
 }

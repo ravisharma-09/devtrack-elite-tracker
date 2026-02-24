@@ -126,7 +126,7 @@ export const Timetable: React.FC = () => {
             <div>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest">
-                        {showAllDays ? 'Full Weekly Schedule' : 'Today\\'s Schedule'}
+                        {showAllDays ? 'Full Weekly Schedule' : "Today's Schedule"}
                     </h3>
                     <button
                         onClick={() => setShowAllDays(!showAllDays)}
