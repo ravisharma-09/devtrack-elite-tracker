@@ -12,7 +12,7 @@ export const Timetable: React.FC = () => {
     const [showAllDays, setShowAllDays] = useState(false);
     const today = getTodayDateString();
 
-    const [activeTimerTaskId, setActiveTimerTaskId] = useState<string | null>(null);
+    const [activeTimerTask, setActiveTimerTask] = useState<{ id: string, title: string, category?: StudySession['category'] } | null>(null);
     const [timerSeconds, setTimerSeconds] = useState<number>(0);
     const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
     const [modalPrefill, setModalPrefill] = useState<{ topic?: string, duration?: number, category?: StudySession['category'] }>({});
@@ -32,15 +32,16 @@ export const Timetable: React.FC = () => {
         return () => clearInterval(interval);
     }, [isTimerRunning]);
 
-    const formatTime = (totalSeconds: number) => {
-        const m = Math.floor(totalSeconds / 60);
+    const formatTimeBig = (totalSeconds: number) => {
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
         const s = totalSeconds % 60;
-        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        return `${h > 0 ? h.toString().padStart(2, '0') + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
 
     const handleStartTimer = (task: any) => {
-        if (activeTimerTaskId !== task.id) {
-            setActiveTimerTaskId(task.id);
+        if (activeTimerTask?.id !== task.id) {
+            setActiveTimerTask({ id: task.id, title: task.title || 'Custom Session' });
             setTimerSeconds(0);
         }
         setIsTimerRunning(true);
@@ -61,9 +62,9 @@ export const Timetable: React.FC = () => {
         else if (t.includes('math')) guessCat = 'Maths';
         else if (t.includes('chem')) guessCat = 'Chemistry';
         else if (t.includes('project')) guessCat = 'Project Work';
-        else if (t.includes('open source')) guessCat = 'Open Source';
+        else if (t.includes('open source') || t.includes('os')) guessCat = 'Open Source';
 
-        setModalPrefill({ topic: task.title, duration: mins, category: guessCat });
+        setModalPrefill({ topic: task.id === 'custom' ? '' : task.title, duration: mins, category: guessCat });
         setIsModalOpen(true);
     };
 
@@ -73,10 +74,10 @@ export const Timetable: React.FC = () => {
 
     return (
         <div className="space-y-8 animate-fade-in pb-12">
-            <header className="mb-8 border-b border-brand-border pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <header className="mb-4 border-b border-brand-border pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
                     <h2 className="text-2xl font-bold retro-text tracking-widest uppercase mb-2">Daily Execution System</h2>
-                    <p className="retro-text-sub">Weekly schedule + live session log for today</p>
+                    <p className="retro-text-sub">Run live study blocks and track timetable progress</p>
                 </div>
                 <button
                     onClick={() => {
@@ -85,17 +86,56 @@ export const Timetable: React.FC = () => {
                     }}
                     className="flex items-center gap-2 bg-brand-primary/10 border border-brand-primary/50 text-brand-primary px-4 py-2 text-sm font-mono hover:bg-brand-primary hover:text-black transition-colors rounded uppercase tracking-widest"
                 >
-                    <PlusCircle size={16} /> Add Study Session
+                    <PlusCircle size={16} /> Log Manually
                 </button>
             </header>
+
+            {/* ── BIG CENTRAL TIMER ────────────────────────────────────────── */}
+            <div className={`retro-panel p-8 text-center border-2 transition-all duration-300 ${isTimerRunning ? 'border-brand-primary shadow-[0_0_30px_rgba(34,197,94,0.15)]' : 'border-brand-accent/30'}`}>
+                {activeTimerTask ? (
+                    <div>
+                        <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-2 flex items-center justify-center gap-2">
+                            <Clock size={16} className={isTimerRunning ? "text-brand-primary animate-pulse" : ""} />
+                            Currently Active: <span className="text-brand-primary ml-1">{activeTimerTask.title}</span>
+                        </h3>
+                        <div className={`text-6xl md:text-8xl font-black font-mono tracking-widest my-8 ${isTimerRunning ? 'text-brand-primary drop-shadow-[0_0_15px_rgba(34,197,94,0.5)]' : 'text-brand-accent drop-shadow-[0_0_15px_rgba(245,158,11,0.3)]'}`}>
+                            {formatTimeBig(timerSeconds)}
+                        </div>
+                        <div className="flex flex-wrap justify-center items-center gap-4">
+                            {isTimerRunning ? (
+                                <button onClick={handlePauseTimer} className="flex items-center gap-2 bg-brand-bg border border-brand-accent text-brand-accent px-6 py-3 rounded hover:bg-brand-accent hover:text-black uppercase font-mono tracking-widest transition-colors font-bold">
+                                    <PauseCircle size={20} /> Pause Clock
+                                </button>
+                            ) : (
+                                <button onClick={() => setIsTimerRunning(true)} className="flex items-center gap-2 bg-brand-bg border border-brand-primary text-brand-primary px-6 py-3 rounded hover:bg-brand-primary hover:text-black uppercase font-mono tracking-widest transition-colors font-bold">
+                                    <PlayCircle size={20} /> Resume Clock
+                                </button>
+                            )}
+                            <button onClick={() => handleLogSession(activeTimerTask)} className="flex items-center gap-2 bg-brand-primary/20 border border-brand-primary text-brand-primary px-6 py-3 rounded hover:bg-brand-primary hover:text-black uppercase font-mono tracking-widest transition-colors font-bold">
+                                <CheckSquare size={20} /> End & Log Session
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="py-6">
+                        <div className="text-6xl md:text-8xl font-black font-mono tracking-widest my-8 text-brand-secondary/30">
+                            00:00
+                        </div>
+                        <p className="text-brand-secondary font-mono text-sm mb-6 uppercase tracking-wider">Select a task from today's timetable below, or start a random session.</p>
+                        <button onClick={() => handleStartTimer({ id: 'custom', title: 'Custom Session' })} className="flex items-center gap-2 bg-brand-bg border border-brand-accent text-brand-accent px-6 py-3 rounded hover:bg-brand-accent hover:text-black uppercase font-mono tracking-widest transition-colors mx-auto font-bold">
+                            <PlayCircle size={20} /> Start Custom Session
+                        </button>
+                    </div>
+                )}
+            </div>
 
             {/* ── TODAY'S LIVE SESSION LOG ──────────────────────────────────── */}
             <div className="retro-panel p-6 border-brand-accent/30">
                 <h3 className="text-sm font-mono uppercase text-brand-accent tracking-widest mb-4 flex items-center gap-2">
-                    <BookOpen size={16} /> Today's Study Log — {today}
+                    <BookOpen size={16} /> Today's Completed Logs — {today}
                 </h3>
                 {todaySessions.length === 0 ? (
-                    <p className="text-brand-secondary font-mono text-sm">No sessions logged today. Hit "Add Study Session" to start.</p>
+                    <p className="text-brand-secondary font-mono text-sm">No sessions completed today yet.</p>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                         {todaySessions.map(s => (
@@ -177,11 +217,11 @@ export const Timetable: React.FC = () => {
 
                                 <div className="space-y-2">
                                     {dayData.tasks.map(task => {
-                                        const isTaskActiveTimer = activeTimerTaskId === task.id;
+                                        const isTaskActiveTimer = activeTimerTask?.id === task.id;
                                         return (
                                             <div
                                                 key={task.id}
-                                                className={`flex flex-col gap-2 p-3 rounded border transition-colors ${task.completed
+                                                className={`flex items-center justify-between gap-2 p-3 rounded border transition-colors ${task.completed
                                                     ? 'bg-brand-bg border-brand-primary/30'
                                                     : 'bg-brand-bg/50 border-brand-border hover:border-brand-secondary/50'} ${isTaskActiveTimer ? 'ring-1 ring-brand-accent shadow-[0_0_10px_rgba(245,158,11,0.2)]' : ''}`}
                                             >
@@ -193,7 +233,7 @@ export const Timetable: React.FC = () => {
                                                     >
                                                         {task.completed ? <CheckSquare size={18} /> : <Square size={18} />}
                                                     </button>
-                                                    <div className="flex-1">
+                                                    <div>
                                                         <div className={`font-medium text-sm ${task.completed ? 'text-brand-primary/60 line-through' : 'text-brand-primary'}`}>
                                                             {task.title}
                                                         </div>
@@ -203,32 +243,15 @@ export const Timetable: React.FC = () => {
                                                     </div>
                                                 </div>
 
-                                                {/* Active Timer Controls */}
-                                                {isToday && !task.completed && (
-                                                    <div className="ml-7 flex items-center gap-3 mt-1 pt-2 border-t border-brand-border/50">
-                                                        {isTaskActiveTimer ? (
-                                                            <>
-                                                                <div className="font-mono text-brand-accent font-bold bg-brand-bg px-2 py-1 rounded text-sm tracking-wider">
-                                                                    {formatTime(timerSeconds)}
-                                                                </div>
-                                                                {isTimerRunning ? (
-                                                                    <button onClick={handlePauseTimer} className="flex items-center gap-1 text-xs text-brand-secondary hover:text-brand-accent uppercase font-mono tracking-wider">
-                                                                        <PauseCircle size={14} /> Pause
-                                                                    </button>
-                                                                ) : (
-                                                                    <button onClick={() => handleStartTimer(task)} className="flex items-center gap-1 text-xs text-brand-secondary hover:text-brand-primary uppercase font-mono tracking-wider">
-                                                                        <PlayCircle size={14} /> Resume
-                                                                    </button>
-                                                                )}
-                                                                <button onClick={() => handleLogSession(task)} className="flex items-center gap-1 text-xs text-brand-primary bg-brand-primary/10 px-2 py-1 rounded hover:bg-brand-primary hover:text-black uppercase font-mono tracking-wider ml-auto">
-                                                                    Log & Done
-                                                                </button>
-                                                            </>
-                                                        ) : (
-                                                            <button onClick={() => handleStartTimer(task)} className="flex items-center gap-1 text-xs text-brand-secondary hover:text-brand-primary uppercase font-mono tracking-wider">
-                                                                <PlayCircle size={14} /> Start Timer
-                                                            </button>
-                                                        )}
+                                                {/* Start Timer Play Button Wrapper */}
+                                                {isToday && !task.completed && !isTaskActiveTimer && (
+                                                    <button onClick={() => handleStartTimer(task)} className="p-2 text-brand-secondary hover:text-brand-primary transition-colors flex-shrink-0" title="Load into Timer">
+                                                        <PlayCircle size={20} />
+                                                    </button>
+                                                )}
+                                                {isToday && !task.completed && isTaskActiveTimer && (
+                                                    <div className="px-2 font-mono text-brand-accent text-xs font-bold uppercase tracking-wider animate-pulse flex-shrink-0">
+                                                        Active
                                                     </div>
                                                 )}
                                             </div>
@@ -253,9 +276,9 @@ export const Timetable: React.FC = () => {
                     onSave={(session) => {
                         addStudySession(session);
                         // Stop and clear timer if the logged session corresponds to it
-                        if (activeTimerTaskId) {
+                        if (activeTimerTask) {
                             setIsTimerRunning(false);
-                            setActiveTimerTaskId(null);
+                            setActiveTimerTask(null);
                             setTimerSeconds(0);
                         }
                     }}
