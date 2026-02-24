@@ -11,7 +11,7 @@ import { Brain, Clock, PlusCircle, Target, Flame, TrendingUp, Zap, Activity as A
 export const Dashboard: React.FC = () => {
     const { user } = useAuth();
     const {
-        roadmap, activityHistory, aiAnalytics, timetable, addStudySession, setAiAnalytics
+        roadmap, activityHistory, aiAnalytics, timetable, addStudySession, setAiAnalytics, studySessions
     } = useStore();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -109,11 +109,53 @@ export const Dashboard: React.FC = () => {
 
 
     const streak = profile?.consistency_score || 0;
-    const consistencyScore = profile ? Math.min(100, Math.round((profile.consistency_score / 30) * 100)) : 0;
 
-    // Calculate Level
-    const skillScore = profile?.skill_score || 0;
-    const level = skillScore < 50 ? 'Beginner' : skillScore < 200 ? 'Intermediate' : 'Advanced';
+    // ─── NEW STATS LOGIC ───────────────────────────────────────
+    const categoryTotals: Record<string, number> = {};
+    const categoryWeekly: Record<string, number> = {};
+    let openSourceWeekly = 0;
+    let dsaWeekly = 0;
+    let lastMathsChemDate: Date | null = null;
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    studySessions.forEach(session => {
+        const cat = session.category;
+        const duration = session.durationMinutes || 0;
+        const sessionDate = new Date(session.timestamp);
+
+        categoryTotals[cat] = (categoryTotals[cat] || 0) + duration;
+        if (sessionDate >= oneWeekAgo) {
+            categoryWeekly[cat] = (categoryWeekly[cat] || 0) + duration;
+            if (cat === 'Open Source') openSourceWeekly += duration;
+            if (cat === 'DSA') dsaWeekly += duration;
+        }
+        if (cat === 'Maths' || cat === 'Chemistry') {
+            if (!lastMathsChemDate || sessionDate > lastMathsChemDate) lastMathsChemDate = sessionDate;
+        }
+    });
+
+    const activeCategories = Object.entries(categoryTotals).filter(([, v]) => v > 0);
+    let mostFocused = 'N/A';
+    let leastFocused = 'N/A';
+    if (activeCategories.length > 0) {
+        activeCategories.sort((a, b) => b[1] - a[1]);
+        mostFocused = activeCategories[0][0];
+        leastFocused = activeCategories[activeCategories.length - 1][0];
+    }
+
+    let weeklyPlannedMinutes = 0;
+    let weeklyCompletedMinutes = 0;
+    timetable.forEach(day => {
+        day.tasks.forEach(t => {
+            weeklyPlannedMinutes += t.durationMinutes;
+            if (t.completed) weeklyCompletedMinutes += t.durationMinutes;
+        });
+    });
+    const weeklyExecutionRate = weeklyPlannedMinutes > 0 ? Math.round((weeklyCompletedMinutes / weeklyPlannedMinutes) * 100) : 0;
+    const missedMathsChemDays = lastMathsChemDate ? Math.floor((now.getTime() - (lastMathsChemDate as Date).getTime()) / (1000 * 3600 * 24)) : 7;
+    // ───────────────────────────────────────────────────────────
+
     return (
         <div className="space-y-8 animate-fade-in pb-12">
             <header className="mb-8 border-b border-brand-border pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
@@ -131,21 +173,64 @@ export const Dashboard: React.FC = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {
                     [
+                        { label: 'Weekly Execution', value: `${weeklyExecutionRate}%`, icon: <TrendingUp size={18} className="text-brand-primary" />, color: 'text-brand-primary' },
                         { label: 'Study Streak', value: `${streak}d`, icon: <Flame size={18} className="text-red-400" />, color: 'text-red-400' },
-                        { label: 'Today Minutes', value: `${todayStudyMinutes}m`, icon: <Clock size={18} className="text-blue-400" />, color: 'text-blue-400' },
-                        { label: 'Consistency', value: `${consistencyScore}%`, icon: <TrendingUp size={18} className="text-brand-primary" />, color: 'text-brand-primary' },
-                        { label: 'Skill Score', value: `${skillScore} (${level})`, icon: <Target size={18} className="text-brand-accent" />, color: 'text-brand-accent' },
+                        { label: 'Most Focused', value: mostFocused, icon: <Target size={18} className="text-brand-accent" />, color: 'text-brand-accent' },
+                        { label: 'Least Focused', value: leastFocused, icon: <Clock size={18} className="text-brand-secondary" />, color: 'text-brand-secondary' },
                     ].map(stat => (
                         <div key={stat.label} className="retro-panel p-4 flex items-center gap-3">
                             <div className="p-2 bg-brand-bg rounded-lg border border-brand-border">{stat.icon}</div>
-                            <div>
+                            <div className="overflow-hidden">
                                 <div className="text-xs font-mono text-brand-secondary uppercase tracking-widest">{stat.label}</div>
-                                <div className={`text-xl font-bold font-mono ${stat.color}`}>{stat.value}</div>
+                                <div className={`text-xl font-bold font-mono truncate ${stat.color}`}>{stat.value}</div>
                             </div>
                         </div>
                     ))
                 }
             </div >
+
+            {/* SMART ALERTS */}
+            {(missedMathsChemDays >= 7 || openSourceWeekly < 60 || dsaWeekly < 240) && (
+                <div className="bg-brand-bg/80 border border-brand-accent/50 rounded-lg p-4 animate-fade-in shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+                    <h3 className="text-sm font-mono uppercase text-brand-accent tracking-widest mb-2 flex items-center gap-2">
+                        <Zap size={16} /> Course Correction Required
+                    </h3>
+                    <ul className="space-y-1">
+                        {missedMathsChemDays >= 7 && (
+                            <li className="text-sm text-brand-secondary font-mono flex items-center gap-2">
+                                <span className="text-red-400">●</span> It has been over 7 days since your last Maths/Chemistry session. Time to review!
+                            </li>
+                        )}
+                        {openSourceWeekly < 60 && (
+                            <li className="text-sm text-brand-secondary font-mono flex items-center gap-2">
+                                <span className="text-yellow-400">●</span> Open Source contribution is low ({openSourceWeekly}m this week). Suggest picking up a small issue to solve.
+                            </li>
+                        )}
+                        {dsaWeekly < 240 && (
+                            <li className="text-sm text-brand-secondary font-mono flex items-center gap-2">
+                                <span className="text-brand-primary">●</span> DSA focus is under 4 hours this week ({Math.floor(dsaWeekly / 60)}h {dsaWeekly % 60}m). Consider a focus shift.
+                            </li>
+                        )}
+                    </ul>
+                </div>
+            )}
+
+            {/* CATEGORY BREAKDOWN */}
+            <div className="retro-panel p-6">
+                <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-4">Focus Distribution</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                    {['DSA', 'Competitive Programming', 'Maths', 'Chemistry', 'Open Source', 'Web Development', 'Project Work'].map(cat => {
+                        const totalMins = categoryTotals[cat] || 0;
+                        const hrs = (totalMins / 60).toFixed(1);
+                        return (
+                            <div key={cat} className="p-3 bg-brand-bg/50 border border-brand-border/30 rounded text-center">
+                                <div className="text-[10px] uppercase font-mono text-brand-secondary/80 mb-1 leading-tight h-6">{cat === 'Competitive Programming' ? 'CP' : cat === 'Web Development' ? 'Web Dev' : cat}</div>
+                                <div className="text-lg font-bold font-mono text-brand-primary">{hrs} <span className="text-xs text-brand-secondary">hrs</span></div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -162,7 +247,13 @@ export const Dashboard: React.FC = () => {
                         )}
                     </div>
 
-                    {aiAnalytics?.plan ? (
+                    {studySessions.length < 3 ? (
+                        <div className="h-full flex flex-col justify-center items-center text-center py-10 border border-brand-accent/20 bg-brand-bg/30 rounded">
+                            <Brain size={28} className="mb-3 text-brand-secondary opacity-50" />
+                            <div className="text-sm font-mono text-brand-secondary font-bold tracking-widest uppercase">Not enough telemetry</div>
+                            <div className="text-xs font-mono text-brand-secondary/60 mt-2 max-w-[80%]">Log at least 3 sessions to activate AI analysis.</div>
+                        </div>
+                    ) : aiAnalytics?.plan ? (
                         <div className="space-y-4">
                             <div className="text-brand-primary font-mono font-bold text-sm mb-2 opacity-90">
                                 "{aiAnalytics.plan.motivationalInsight}"

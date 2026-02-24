@@ -321,7 +321,7 @@ create table if not exists public.profiles (
   created_at timestamptz default now()
 );
 alter table public.profiles enable row level security;
-create policy "Users can view own telemetry profile" on public.profiles for select using (auth.uid() = id);
+create policy "Anyone can view telemetry profiles" on public.profiles for select using (true);
 create policy "Users can update own telemetry profile" on public.profiles for update using (auth.uid() = id);
 create policy "Users can insert own telemetry profile" on public.profiles for insert with check (auth.uid() = id);
 

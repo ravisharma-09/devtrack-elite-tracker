@@ -33,7 +33,11 @@ export const Signup: React.FC = () => {
                 setStep('otp');
             }
         } catch (err: any) {
-            setError(err?.message || 'Signup failed. Please try again.');
+            let msg = err?.message || 'Signup failed. Please try again.';
+            if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('email limit')) {
+                msg = 'Email rate limit reached! Please go to your Supabase Dashboard -> Authentication -> Providers -> Email, and turn OFF "Confirm email". Then try again.';
+            }
+            setError(msg);
         } finally {
             setLoading(false);
         }

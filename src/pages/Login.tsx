@@ -19,7 +19,11 @@ export const Login: React.FC = () => {
             await login(email, password);
             navigate('/');
         } catch (err: any) {
-            setError(err?.message || 'Invalid credentials. Please try again.');
+            let msg = err?.message || 'Invalid credentials. Please try again.';
+            if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('email limit')) {
+                msg = 'Email rate limit reached. Please disable "Confirm email" in your Supabase Auth settings for local development.';
+            }
+            setError(msg);
         } finally {
             setLoading(false);
         }

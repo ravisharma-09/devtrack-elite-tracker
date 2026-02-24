@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import type { StudySession } from '../types';
 import { X } from 'lucide-react';
+import { getTodayDateString } from '../engine/consistencyEngine';
 
 interface AddStudySessionModalProps {
     onClose: () => void;
-    onSave: (session: Omit<StudySession, 'id' | 'date' | 'timestamp'>) => void;
+    onSave: (session: Omit<StudySession, 'id' | 'timestamp'>) => void;
 }
 
 export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onClose, onSave }) => {
@@ -13,19 +14,21 @@ export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onCl
     const [durationStr, setDurationStr] = useState('');
     const [difficulty, setDifficulty] = useState<StudySession['difficulty']>('Medium');
     const [notes, setNotes] = useState('');
+    const [date, setDate] = useState(getTodayDateString());
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!topic || !durationStr) return;
+        if (!durationStr) return;
         const durationMinutes = parseInt(durationStr, 10);
         if (isNaN(durationMinutes) || durationMinutes <= 0) return;
 
         onSave({
-            topic,
+            topic: topic.trim() || category, // fallback to category if topic is omitted
             category,
             durationMinutes,
             difficulty,
-            notes
+            notes,
+            date
         });
         onClose();
     };
@@ -45,18 +48,6 @@ export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onCl
 
                     <form onSubmit={handleSave} className="space-y-4">
                         <div>
-                            <label className="block text-xs font-mono text-brand-secondary mb-1 uppercase tracking-widest">Topic Name</label>
-                            <input
-                                type="text"
-                                required
-                                value={topic}
-                                onChange={(e) => setTopic(e.target.value)}
-                                placeholder="e.g. Graphs BFS"
-                                className="w-full bg-brand-bg border border-brand-border/50 text-brand-primary p-2 rounded focus:outline-none focus:border-brand-accent font-mono"
-                            />
-                        </div>
-
-                        <div>
                             <label className="block text-xs font-mono text-brand-secondary mb-1 uppercase tracking-widest">Category</label>
                             <select
                                 value={category}
@@ -64,11 +55,27 @@ export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onCl
                                 className="w-full bg-brand-bg border border-brand-border/50 text-brand-primary p-2 rounded focus:outline-none focus:border-brand-accent font-mono appearance-none"
                             >
                                 <option value="DSA">DSA</option>
-                                <option value="Web Dev">Web Dev</option>
-                                <option value="CS Fundamentals">CS Fundamentals</option>
-                                <option value="Project">Project</option>
+                                <option value="Competitive Programming">Competitive Programming</option>
+                                <option value="Web Development">Web Development</option>
+                                <option value="Project Work">Project Work</option>
+                                <option value="Open Source">Open Source</option>
+                                <option value="Maths">Maths</option>
+                                <option value="Chemistry">Chemistry</option>
+                                <option value="Contest">Contest</option>
+                                <option value="Revision">Revision</option>
                                 <option value="Other">Other</option>
                             </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-mono text-brand-secondary mb-1 uppercase tracking-widest">Topic Name (Optional)</label>
+                            <input
+                                type="text"
+                                value={topic}
+                                onChange={(e) => setTopic(e.target.value)}
+                                placeholder="e.g. Graphs BFS"
+                                className="w-full bg-brand-bg border border-brand-border/50 text-brand-primary p-2 rounded focus:outline-none focus:border-brand-accent font-mono"
+                            />
                         </div>
 
                         <div>
@@ -80,6 +87,17 @@ export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onCl
                                 value={durationStr}
                                 onChange={(e) => setDurationStr(e.target.value)}
                                 placeholder="e.g. 60"
+                                className="w-full bg-brand-bg border border-brand-border/50 text-brand-primary p-2 rounded focus:outline-none focus:border-brand-accent font-mono"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-mono text-brand-secondary mb-1 uppercase tracking-widest">Date</label>
+                            <input
+                                type="date"
+                                required
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
                                 className="w-full bg-brand-bg border border-brand-border/50 text-brand-primary p-2 rounded focus:outline-none focus:border-brand-accent font-mono"
                             />
                         </div>

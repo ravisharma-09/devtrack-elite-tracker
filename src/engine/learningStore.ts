@@ -53,8 +53,8 @@ export function useLearningStore(userId = 'local') {
 
     // ── ACTION: Add Study Session ──────────────────────────────────────────────
     // Writes to localStorage immediately, then syncs to Supabase
-    const addStudySession = (sessionData: Omit<StudySession, 'id' | 'date' | 'timestamp'>) => {
-        const today = getTodayDateString();
+    const addStudySession = (sessionData: Omit<StudySession, 'id' | 'timestamp'>) => {
+        const today = sessionData.date || getTodayDateString();
         const newSession: StudySession = {
             ...sessionData,
             id: `sess_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,

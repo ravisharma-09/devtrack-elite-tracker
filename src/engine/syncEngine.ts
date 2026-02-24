@@ -294,10 +294,28 @@ export async function runTelemetrySync(userId: string): Promise<void> {
             }
         }
 
+        // ─── Calculate New Skill Score ───
+        // Formula: (DSA hours × 2) + (CP rating / 10) + (Open source PR/commit count × 10) + (Project hours × 1.5)
+        const { data: studySessionsData } = await supabase.from('study_sessions').select('category, duration_minutes').eq('user_id', userId);
+        let dsaMinutes = 0;
+        let projectMinutes = 0;
+        if (studySessionsData) {
+            studySessionsData.forEach((s: any) => {
+                if (s.category === 'DSA') dsaMinutes += s.duration_minutes || 0;
+                if (s.category === 'Project Work') projectMinutes += s.duration_minutes || 0;
+            });
+        }
+        const { count: openSourceCount } = await supabase.from('activities').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('source', 'github');
+
+        const dsaHours = dsaMinutes / 60;
+        const projectHours = projectMinutes / 60;
+        const newSkillScore = Math.floor((dsaHours * 2) + (cfRating / 10) + ((openSourceCount || 0) * 10) + (projectHours * 1.5));
+
         // ─── Update Profile ───
         await supabase.from('profiles').update({
             cf_rating: cfRating,
             problems_solved: totalProblemsSolved,
+            skill_score: newSkillScore
         }).eq('id', userId);
 
     } catch (e) {

@@ -59,7 +59,7 @@ export interface ActivityHistory {
 export interface StudySession {
     id: string;
     topic: string; // The roadmap string name or arbitrary study title
-    category: 'DSA' | 'Web Dev' | 'CS Fundamentals' | 'Project' | 'Other';
+    category: 'DSA' | 'Competitive Programming' | 'Web Development' | 'Project Work' | 'Open Source' | 'Maths' | 'Chemistry' | 'Contest' | 'Revision' | 'Other';
     durationMinutes: number;
     difficulty: 'Easy' | 'Medium' | 'Hard';
     date: string; // YYYY-MM-DD
