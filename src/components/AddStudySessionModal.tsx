@@ -6,12 +6,21 @@ import { getTodayDateString } from '../engine/consistencyEngine';
 interface AddStudySessionModalProps {
     onClose: () => void;
     onSave: (session: Omit<StudySession, 'id' | 'timestamp'>) => void;
+    initialTopic?: string;
+    initialCategory?: StudySession['category'];
+    initialDuration?: number;
 }
 
-export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({ onClose, onSave }) => {
-    const [topic, setTopic] = useState('');
-    const [category, setCategory] = useState<StudySession['category']>('DSA');
-    const [durationStr, setDurationStr] = useState('');
+export const AddStudySessionModal: React.FC<AddStudySessionModalProps> = ({
+    onClose,
+    onSave,
+    initialTopic = '',
+    initialCategory = 'DSA',
+    initialDuration
+}) => {
+    const [topic, setTopic] = useState(initialTopic);
+    const [category, setCategory] = useState<StudySession['category']>(initialCategory);
+    const [durationStr, setDurationStr] = useState(initialDuration ? initialDuration.toString() : '');
     const [difficulty, setDifficulty] = useState<StudySession['difficulty']>('Medium');
     const [notes, setNotes] = useState('');
     const [date, setDate] = useState(getTodayDateString());
