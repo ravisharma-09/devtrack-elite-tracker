@@ -60,9 +60,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (e) {
             console.error('[DevTrack Auth] Profile healing failed:', e);
         }
-        await runBackgroundSync(authUser.id);
+
+        // ── Let the app render immediately ──────────────────────────────────────
         setIsDataReady(true);
         hasHydrated.current = true;
+
+        // ── Run background network sync asynchronously (non-blocking) ───────────
+        runBackgroundSync(authUser.id).catch(err => {
+            console.error('[DevTrack Auth] Background sync failed:', err);
+        });
     }, []);
 
     // ── Session restore on app load (persists across refresh) ─────────────────
