@@ -6,7 +6,7 @@ import { calculateConsistencyScore, calculateStreak } from '../engine/consistenc
 import { ConsistencyGraph } from '../components/ConsistencyGraph';
 import { syncExternalStats } from '../engine/externalSyncEngine';
 import { computeSkillProfile } from '../engine/analyticsEngine';
-import { Trophy, Flame, Target, BookOpen, Clock, TrendingUp, TrendingDown, Minus, Zap, RefreshCw, Crosshair, BrainCircuit } from 'lucide-react';
+import { Trophy, Flame, Target, BookOpen, Clock, TrendingUp, TrendingDown, Minus, Zap, RefreshCw, Crosshair, BrainCircuit, Calendar } from 'lucide-react';
 import {
     Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer,
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, AreaChart, Area
@@ -300,6 +300,43 @@ export const Statistics: React.FC = () => {
                         <div className="text-xs text-brand-secondary/70 mt-1">{s.sub}</div>
                     </div>
                 ))}
+            </div>
+
+            {/* ── DETAILED STUDY HISTORY ────────────────────────────────────── */}
+            <div className="retro-panel p-6">
+                <h3 className="text-sm font-mono uppercase text-brand-secondary tracking-widest mb-5 flex items-center gap-2">
+                    <BookOpen size={16} /> Detailed Study History
+                </h3>
+                {studySessions.length === 0 ? (
+                    <div className="text-brand-secondary text-sm font-mono text-center py-8">
+                        No study sessions recorded yet. Start a timer in the Timetable!
+                    </div>
+                ) : (
+                    <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                        {[...studySessions].sort((a, b) => b.timestamp - a.timestamp).map(session => (
+                            <div key={session.id} className="p-4 bg-brand-bg/50 border border-brand-primary/20 rounded flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-brand-primary/50 transition-colors">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-brand-primary font-bold font-mono text-base">{session.topic}</span>
+                                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 bg-brand-primary/10 text-brand-primary rounded">{session.category}</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-brand-secondary my-2">
+                                        <span className="flex items-center gap-1"><Calendar size={12} /> {session.date || new Date(session.timestamp).toLocaleDateString()}</span>
+                                        <span className="flex items-center gap-1"><Clock size={12} /> {session.durationMinutes} min elapsed</span>
+                                        <span className="flex items-center gap-1">
+                                            Difficulty: <span className={`${session.difficulty === 'Hard' ? 'text-red-400' : session.difficulty === 'Medium' ? 'text-brand-accent' : 'text-brand-primary'}`}>{session.difficulty}</span>
+                                        </span>
+                                    </div>
+                                    {session.notes && (
+                                        <div className="mt-2 text-sm font-mono text-brand-secondary/80 italic border-l-2 border-brand-primary/30 pl-3 py-0.5">
+                                            "{session.notes}"
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* ── HEATMAP ───────────────────────────────────────────────────── */}
