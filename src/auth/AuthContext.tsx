@@ -110,8 +110,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         if (newSession?.user) {
                             const authUser = normalise(newSession.user);
                             setUser(authUser);
-                            // Avoid re-hydrating if we already did it on mount, unless it's a new login
-                            if (!hasHydrated.current || event === 'SIGNED_IN') {
+                            // Avoid re-hydrating if we already did it on mount
+                            if (!hasHydrated.current) {
                                 await hydrateUser(authUser);
                             }
                         }

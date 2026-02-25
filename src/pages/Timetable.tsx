@@ -12,7 +12,12 @@ export const Timetable: React.FC = () => {
     const [showAllDays, setShowAllDays] = useState(false);
     const today = getTodayDateString();
 
-    const [displaySeconds, setDisplaySeconds] = useState<number>(0);
+    const [displaySeconds, setDisplaySeconds] = useState<number>(() => {
+        if (timerState.isRunning) {
+            return timerState.accumulatedSeconds + Math.floor((Date.now() - (timerState.lastStartedTimestamp || Date.now())) / 1000);
+        }
+        return timerState.accumulatedSeconds;
+    });
     const [modalPrefill, setModalPrefill] = useState<{ topic?: string, duration?: number, category?: StudySession['category'] }>({});
 
     // Sessions logged today from the engine store
