@@ -117,6 +117,14 @@ function useLearningStoreBase(userId = 'local') {
     const [aiAnalytics, setAiAnalytics] = useState<AIAnalyticsPayload | null>(null);
     const [timetable, setTimetable] = useState<DailyTimetable[]>(initialTimetable);
 
+    // ── Timer State
+    const [timerState, setTimerState] = useState<{
+        task: { id: string, title: string, category?: StudySession['category'] } | null,
+        isRunning: boolean,
+        accumulatedSeconds: number,
+        lastStartedTimestamp: number | null
+    }>({ task: null, isRunning: false, accumulatedSeconds: 0, lastStartedTimestamp: null });
+
     // ── ACTION: Add Study Session ──────────────────────────────────────────────
     // Writes to localStorage immediately, then syncs to Supabase
     const addStudySession = (sessionData: Omit<StudySession, 'id' | 'timestamp'>) => {
@@ -252,6 +260,7 @@ function useLearningStoreBase(userId = 'local') {
         setAIRecommendation(null);
         setExternalStats(null);
         setAiAnalytics(null);
+        setTimerState({ task: null, isRunning: false, accumulatedSeconds: 0, lastStartedTimestamp: null });
     };
 
     // ── ACTION: Complete/Uncomplete Timetable Task ──────────────────────────────
@@ -267,9 +276,34 @@ function useLearningStoreBase(userId = 'local') {
         });
     };
 
+    // ── ACTION: Timer Controls ──────────────────────────────────────────────────
+    const startTimer = (task?: any) => {
+        setTimerState(prev => {
+            if (task && prev.task?.id !== task.id) {
+                return { task: { id: task.id, title: task.title, category: task.category }, isRunning: true, accumulatedSeconds: 0, lastStartedTimestamp: Date.now() };
+            }
+            if (prev.isRunning) return prev;
+            return { ...prev, isRunning: true, lastStartedTimestamp: Date.now() };
+        });
+    };
+
+    const pauseTimer = () => {
+        setTimerState(prev => {
+            if (!prev.isRunning) return prev;
+            const elapsed = Math.floor((Date.now() - (prev.lastStartedTimestamp || Date.now())) / 1000);
+            return { ...prev, isRunning: false, accumulatedSeconds: prev.accumulatedSeconds + elapsed, lastStartedTimestamp: null };
+        });
+    };
+
+    const stopAndClearTimer = () => {
+        setTimerState({ task: null, isRunning: false, accumulatedSeconds: 0, lastStartedTimestamp: null });
+    };
+
     return {
         roadmap, studySessions, activityHistory, statistics, aiRecommendation, externalStats, aiAnalytics, timetable,
         addStudySession, completeMicroTask, updateTopicProgress, storeAIRecommendation, clearStore, setTimetableTaskCompleted,
-        setRoadmap, setStatistics, setActivityHistory, setExternalStats, setAiAnalytics, setTimetable, setAIRecommendation, setStudySessions
+        startTimer, pauseTimer, stopAndClearTimer,
+        setRoadmap, setStatistics, setActivityHistory, setExternalStats, setAiAnalytics, setTimetable, setAIRecommendation, setStudySessions,
+        timerState
     };
 }

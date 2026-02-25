@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { signIn, signUp, signOut } from './authService';
 import { isSupabaseConfigured } from '../backend/supabaseClient';
 import { runBackgroundSync } from '../core/backgroundSync';
@@ -32,6 +32,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isLoading, setIsLoading] = useState(true);
     const [isDataReady, setIsDataReady] = useState(false);
 
+    const hasHydrated = useRef(false);
+
     const normalise = (raw: any): AuthUser => ({
         id: raw.id,
         email: raw.email ?? '',
@@ -60,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         await runBackgroundSync(authUser.id);
         setIsDataReady(true);
+        hasHydrated.current = true;
     }, []);
 
     // ── Session restore on app load (persists across refresh) ─────────────────
@@ -102,13 +105,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             const authUser = normalise(newSession.user);
                             setUser(authUser);
                             // Avoid re-hydrating if we already did it on mount, unless it's a new login
-                            if (!isDataReady || event === 'SIGNED_IN') {
+                            if (!hasHydrated.current || event === 'SIGNED_IN') {
                                 await hydrateUser(authUser);
                             }
                         }
                     } else if (event === 'SIGNED_OUT') {
                         setUser(null);
                         setIsDataReady(true);
+                        hasHydrated.current = false;
                     }
                 });
 
