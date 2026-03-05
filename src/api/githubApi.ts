@@ -18,7 +18,8 @@ export interface GHStats {
 export async function fetchGitHubStats(username: string): Promise<GHStats | null> {
     if (!username?.trim()) return null;
     try {
-        const res = await fetch(`/api/gh/${encodeURIComponent(username.trim())}`, {
+        const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+        const res = await fetch(`${baseUrl}/api/gh/${encodeURIComponent(username.trim())}`, {
             signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) {

@@ -17,7 +17,8 @@ export interface LCStats {
 export async function fetchLeetCodeStats(username: string): Promise<LCStats | null> {
     if (!username?.trim()) return null;
     try {
-        const res = await fetch(`/api/lc/${encodeURIComponent(username.trim())}`, {
+        const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+        const res = await fetch(`${baseUrl}/api/lc/${encodeURIComponent(username.trim())}`, {
             signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) {

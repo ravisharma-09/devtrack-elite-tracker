@@ -21,7 +21,8 @@ export interface CFStats {
 export async function fetchCodeforcesStats(handle: string): Promise<CFStats | null> {
     if (!handle?.trim()) return null;
     try {
-        const res = await fetch(`/api/cf/${encodeURIComponent(handle.trim())}`, {
+        const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+        const res = await fetch(`${baseUrl}/api/cf/${encodeURIComponent(handle.trim())}`, {
             signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) {
