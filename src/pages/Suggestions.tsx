@@ -1,10 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { Brain, Zap, Terminal, LayoutTemplate, Github, ExternalLink, RefreshCw, Code2, Trophy, TrendingUp, BookOpen, ChevronRight, AlertCircle, CheckCircle, Target } from 'lucide-react';
+import { Zap, Terminal, LayoutTemplate, Github, ExternalLink, RefreshCw, Code2, Trophy, TrendingUp, BookOpen, ChevronRight, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
-import { runAlgorithmicRecommendationEngine, type RecommendationResult, type RecommendedProblem } from '../engine/recommendationEngine';
 import { generateKnowledgeMap } from '../engine/skillAnalysisEngine';
 import { RetroLoader } from '../components/RetroLoader';
+
+export interface AIRecommendedProblem {
+    title: string;
+    platform: "LeetCode" | "Codeforces";
+    difficulty: "Easy" | "Medium" | "Hard";
+    topic: string;
+    pattern: string;
+    url: string;
+}
+
+export interface AIRecommendationResult {
+    topic: string;
+    description: string;
+    questions: AIRecommendedProblem[];
+}
 
 type TabType = 'dsa' | 'opensource' | 'webdev';
 
@@ -34,25 +48,25 @@ const WEB_ADVANCED = [
 ];
 
 // ── Problem card ──────────────────────────────────────────────────────────────
-const ProblemCard: React.FC<{ prob: RecommendedProblem }> = ({ prob }) => (
-    <a href={prob.link} target="_blank" rel="noreferrer"
+const ProblemCard: React.FC<{ prob: AIRecommendedProblem }> = ({ prob }) => (
+    <a href={prob.url} target="_blank" rel="noreferrer"
         className="retro-panel p-4 block group transition-all duration-300 border-brand-border/30 hover:border-brand-accent bg-brand-bg/40">
         <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <ExternalLink size={11} className="text-brand-accent" />
         </div>
         <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary">{prob.topic}</span>
-            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${prob.level === 3 ? 'text-red-400 border-red-400/30 bg-red-400/5' : prob.level === 2 ? 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5' : 'text-green-400 border-green-400/30 bg-green-400/5'}`}>
-                Level {prob.level} · {prob.rating}
+            <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary">{prob.pattern}</span>
+            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${prob.difficulty === 'Hard' ? 'text-red-400 border-red-400/30 bg-red-400/5' : prob.difficulty === 'Medium' ? 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5' : 'text-green-400 border-green-400/30 bg-green-400/5'}`}>
+                {prob.difficulty} · {prob.platform}
             </span>
         </div>
-        <p className="font-bold font-mono text-sm text-brand-primary group-hover:text-brand-accent transition-colors line-clamp-1">{prob.name}</p>
+        <p className="font-bold font-mono text-sm text-brand-primary group-hover:text-brand-accent transition-colors line-clamp-1">{prob.title}</p>
     </a>
 );
 
 export const Suggestions: React.FC = () => {
     const { user } = useAuth();
-    const [dsaResult, setDsaResult] = useState<RecommendationResult | null>(null);
+    const [dsaResult, setDsaResult] = useState<AIRecommendationResult | null>(null);
     const [knowledgeMap, setKnowledgeMap] = useState<Record<string, number>>({});
     const [cfStats, setCfStats] = useState<any>(null);
     const [lcStats, setLcStats] = useState<any>(null);
@@ -107,11 +121,37 @@ export const Suggestions: React.FC = () => {
                 }
             }
 
-            // Run the algorithmic recommendation engine
+            // Identify active topic
             const km = generateKnowledgeMap(cf, lc);
             setKnowledgeMap(km);
-            const result = await runAlgorithmicRecommendationEngine(user.id, { cf, lc, gh, lastSynced: 0 });
-            setDsaResult(result);
+
+            let activeTopic = 'arrays';
+            let minScore = 100;
+            const foundationTopics = ['arrays', 'strings', 'hashing', 'two pointers'];
+            for (const t of foundationTopics) {
+                const score = km[t] || 0;
+                if (score < 70 && score < minScore) {
+                    minScore = score;
+                    activeTopic = t;
+                }
+            }
+
+            if (minScore >= 70) {
+                activeTopic = 'sliding window'; // Next logical progression if foundation is strong
+                minScore = km[activeTopic] || 0;
+            }
+
+            const cfRat = cf?.rating || 1200;
+
+            // Run the AI LLM recommendation engine
+            const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+            const res = await fetch(`${baseUrl}/api/recommendation?topic=${encodeURIComponent(activeTopic)}&mastery=${minScore}&rating=${cfRat}`);
+            if (res.ok) {
+                const data: AIRecommendationResult = await res.json();
+                setDsaResult(data);
+            } else {
+                console.error("AI Recommendation fetch failed:", await res.text());
+            }
         } catch (e) {
             console.error('Suggestions load error:', e);
         } finally {
@@ -230,22 +270,22 @@ export const Suggestions: React.FC = () => {
                                     </div>
                                     <div>
                                         <h3 className="font-bold font-mono text-blue-400 uppercase tracking-wide">
-                                            📘 Targeted Practice: {dsaResult.activeTopic}
+                                            📘 AI Target: {dsaResult.topic}
                                         </h3>
                                         <p className="text-xs font-mono text-brand-secondary">
-                                            Topic Mastery: {dsaResult.masteryPercentage}% — Structured problem set based on your skill.
+                                            {dsaResult.description}
                                         </p>
                                     </div>
                                 </div>
 
                                 <div className="space-y-6">
-                                    {[1, 2, 3].map(level => {
-                                        const problems = dsaResult.recommendedProblems.filter(p => p.level === level);
+                                    {['Easy', 'Medium', 'Hard'].map(diff => {
+                                        const problems = dsaResult.questions.filter(p => p.difficulty === diff);
                                         if (problems.length === 0) return null;
                                         return (
-                                            <div key={level}>
+                                            <div key={diff}>
                                                 <h4 className="font-mono text-xs uppercase text-brand-secondary tracking-widest mb-3 border-b border-brand-border/30 pb-2">
-                                                    {level === 1 ? 'Level 1 (Foundation)' : level === 2 ? 'Level 2 (Pattern Building)' : 'Level 3 (Advanced Patterns)'}
+                                                    {diff} Pattern Building
                                                 </h4>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                     {problems.map((p, i) => (
