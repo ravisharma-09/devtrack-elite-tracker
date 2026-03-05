@@ -10,6 +10,7 @@ export interface LCStats {
     hardSolved: number;
     ranking: number;
     submissionDates: string[];
+    tags?: Record<string, number>;
     lastSynced: number;
 }
 

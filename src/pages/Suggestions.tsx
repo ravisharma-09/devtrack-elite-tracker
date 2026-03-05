@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Brain, Zap, Terminal, LayoutTemplate, Github, ExternalLink, RefreshCw, Code2, Trophy, TrendingUp, BookOpen, ChevronRight, AlertCircle, CheckCircle, Target } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../backend/supabaseClient';
-import { runDSASuggestionEngine, type DSASuggestionResult, type DSAProblem } from '../core/dsaSuggestionEngine';
+import { runAlgorithmicRecommendationEngine, type RecommendationResult, type RecommendedProblem } from '../engine/recommendationEngine';
+import { generateKnowledgeMap } from '../engine/skillAnalysisEngine';
 import { RetroLoader } from '../components/RetroLoader';
 
 type TabType = 'dsa' | 'opensource' | 'webdev';
@@ -33,7 +34,7 @@ const WEB_ADVANCED = [
 ];
 
 // ── Problem card ──────────────────────────────────────────────────────────────
-const ProblemCard: React.FC<{ prob: DSAProblem }> = ({ prob }) => (
+const ProblemCard: React.FC<{ prob: RecommendedProblem }> = ({ prob }) => (
     <a href={prob.link} target="_blank" rel="noreferrer"
         className="retro-panel p-4 block group transition-all duration-300 border-brand-border/30 hover:border-brand-accent bg-brand-bg/40">
         <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -41,8 +42,8 @@ const ProblemCard: React.FC<{ prob: DSAProblem }> = ({ prob }) => (
         </div>
         <div className="flex items-center gap-2 mb-2">
             <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary">{prob.topic}</span>
-            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${prob.difficulty === 'Hard' ? 'text-red-400 border-red-400/30 bg-red-400/5' : prob.difficulty === 'Medium' ? 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5' : 'text-green-400 border-green-400/30 bg-green-400/5'}`}>
-                {prob.difficulty} · {prob.rating}
+            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${prob.level === 3 ? 'text-red-400 border-red-400/30 bg-red-400/5' : prob.level === 2 ? 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5' : 'text-green-400 border-green-400/30 bg-green-400/5'}`}>
+                Level {prob.level} · {prob.rating}
             </span>
         </div>
         <p className="font-bold font-mono text-sm text-brand-primary group-hover:text-brand-accent transition-colors line-clamp-1">{prob.name}</p>
@@ -51,7 +52,8 @@ const ProblemCard: React.FC<{ prob: DSAProblem }> = ({ prob }) => (
 
 export const Suggestions: React.FC = () => {
     const { user } = useAuth();
-    const [dsaResult, setDsaResult] = useState<DSASuggestionResult | null>(null);
+    const [dsaResult, setDsaResult] = useState<RecommendationResult | null>(null);
+    const [knowledgeMap, setKnowledgeMap] = useState<Record<string, number>>({});
     const [cfStats, setCfStats] = useState<any>(null);
     const [lcStats, setLcStats] = useState<any>(null);
     const [ghStats, setGhStats] = useState<any>(null);
@@ -105,8 +107,10 @@ export const Suggestions: React.FC = () => {
                 }
             }
 
-            // Run the two-track DSA engine
-            const result = await runDSASuggestionEngine(user.id);
+            // Run the algorithmic recommendation engine
+            const km = generateKnowledgeMap(cf, lc);
+            setKnowledgeMap(km);
+            const result = await runAlgorithmicRecommendationEngine(user.id, { cf, lc, gh, lastSynced: 0 });
             setDsaResult(result);
         } catch (e) {
             console.error('Suggestions load error:', e);
@@ -178,86 +182,81 @@ export const Suggestions: React.FC = () => {
             {/* ── DSA Tab ─────────────────────────────────────────────────── */}
             {activeTab === 'dsa' && (
                 <div className="space-y-8 animate-fade-in">
-                    {dsaResult?.error ? (
+                    {!dsaResult ? (
                         /* Not enough data — show guidance message */
                         <div className="retro-panel p-10 text-center border-brand-border/30">
                             <AlertCircle className="w-12 h-12 mx-auto text-brand-accent/40 mb-4" />
                             <h3 className="text-brand-accent font-mono uppercase tracking-widest mb-2">Sync Required</h3>
-                            <p className="text-sm text-brand-secondary font-mono mb-4 leading-relaxed">{dsaResult.error}</p>
+                            <p className="text-sm text-brand-secondary font-mono mb-4 leading-relaxed">Connect your Codeforces and LeetCode accounts to generate your Knowledge Map and structured recommendations.</p>
                             <a href="/profile" className="inline-flex items-center gap-2 px-5 py-2 border border-brand-primary/40 text-brand-primary font-mono text-xs rounded hover:bg-brand-primary/10">
                                 Go to Profile <ChevronRight size={13} />
                             </a>
                         </div>
                     ) : (
                         <>
-                            {/* ── SECTION A: Rating Progression ─── */}
-                            {dsaResult?.ratingProgression && (
-                                <section>
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="w-8 h-8 rounded-lg bg-brand-accent/10 border border-brand-accent/30 flex items-center justify-center">
-                                            <TrendingUp size={15} className="text-brand-accent" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold font-mono text-brand-accent uppercase tracking-wide">🔥 Rating Progression</h3>
-                                            <p className="text-xs font-mono text-brand-secondary">
-                                                Target range: {dsaResult.ratingProgression.targetRange} · Current: {dsaResult.ratingProgression.currentRating} ({dsaResult.ratingProgression.rank})
-                                            </p>
-                                        </div>
+                            {/* ── SECTION A: Knowledge Map ─── */}
+                            <section>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-8 h-8 rounded-lg bg-brand-accent/10 border border-brand-accent/30 flex items-center justify-center">
+                                        <TrendingUp size={15} className="text-brand-accent" />
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative">
-                                        {dsaResult.ratingProgression.problems.map((p, i) => (
-                                            <ProblemCard key={i} prob={p} />
+                                    <div>
+                                        <h3 className="font-bold font-mono text-brand-accent uppercase tracking-wide">🔥 Knowledge Map</h3>
+                                        <p className="text-xs font-mono text-brand-secondary">
+                                            Calculated based on solved problem frequency and difficulty (max 100%)
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                                    {Object.entries(knowledgeMap)
+                                        .sort((a, b) => b[1] - a[1]) // Sort by highest percentage
+                                        .slice(0, 8) // Show top 8
+                                        .map(([topic, pct]) => (
+                                            <div key={topic} className="retro-panel p-3 border-brand-border/30 bg-brand-bg/40 flex justify-between items-center">
+                                                <span className="text-xs font-mono text-brand-secondary uppercase">{topic}</span>
+                                                <span className={`text-sm font-mono font-bold ${pct >= 80 ? 'text-green-400' : pct >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                                    {pct}%
+                                                </span>
+                                            </div>
                                         ))}
-                                    </div>
-                                </section>
-                            )}
+                                </div>
+                            </section>
 
-                            {/* ── SECTION B: Topic Mastery ─── */}
-                            {dsaResult?.topicMastery && (
-                                <section>
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
-                                            <BookOpen size={15} className="text-blue-400" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold font-mono text-blue-400 uppercase tracking-wide">
-                                                📘 Topic Mastery — {dsaResult.topicMastery.currentTopic}
-                                            </h3>
-                                            <p className="text-xs font-mono text-brand-secondary">
-                                                Roadmap progress: {dsaResult.topicMastery.roadmapProgress}% ·
-                                                Success rate: {dsaResult.topicMastery.successRate}%
-                                            </p>
-                                        </div>
+                            {/* ── SECTION B: Structured Practice ─── */}
+                            <section>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
+                                        <BookOpen size={15} className="text-blue-400" />
                                     </div>
-
-                                    {/* Pattern focus badges */}
-                                    <div className="flex flex-wrap gap-2 mb-4">
-                                        <span className="text-[10px] font-mono text-brand-secondary uppercase tracking-widest mt-1">Focus:</span>
-                                        {dsaResult.topicMastery.patternFocus.map(p => (
-                                            <span key={p} className="text-[10px] font-mono px-2 py-1 rounded border border-blue-400/20 text-blue-400 bg-blue-400/5">
-                                                {p}
-                                            </span>
-                                        ))}
+                                    <div>
+                                        <h3 className="font-bold font-mono text-blue-400 uppercase tracking-wide">
+                                            📘 Targeted Practice: {dsaResult.activeTopic}
+                                        </h3>
+                                        <p className="text-xs font-mono text-brand-secondary">
+                                            Topic Mastery: {dsaResult.masteryPercentage}% — Structured problem set based on your skill.
+                                        </p>
                                     </div>
+                                </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {dsaResult.topicMastery.problems.map((p, i) => (
-                                            <ProblemCard key={i} prob={p} />
-                                        ))}
-                                    </div>
-
-                                    {/* Next topic suggestion */}
-                                    {dsaResult.topicMastery.nextTopicSuggestion && (
-                                        <div className="mt-4 retro-panel p-4 border-green-400/20 bg-green-400/5 flex items-center gap-3">
-                                            <Target size={16} className="text-green-400 flex-shrink-0" />
-                                            <p className="text-sm font-mono text-green-400">
-                                                🎉 {dsaResult.topicMastery.currentTopic} is {dsaResult.topicMastery.roadmapProgress}% complete!
-                                                <span className="text-brand-secondary ml-2">Start next: <strong>{dsaResult.topicMastery.nextTopicSuggestion}</strong></span>
-                                            </p>
-                                        </div>
-                                    )}
-                                </section>
-                            )}
+                                <div className="space-y-6">
+                                    {[1, 2, 3].map(level => {
+                                        const problems = dsaResult.recommendedProblems.filter(p => p.level === level);
+                                        if (problems.length === 0) return null;
+                                        return (
+                                            <div key={level}>
+                                                <h4 className="font-mono text-xs uppercase text-brand-secondary tracking-widest mb-3 border-b border-brand-border/30 pb-2">
+                                                    {level === 1 ? 'Level 1 (Foundation)' : level === 2 ? 'Level 2 (Pattern Building)' : 'Level 3 (Advanced Patterns)'}
+                                                </h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {problems.map((p, i) => (
+                                                        <ProblemCard key={i} prob={p} />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </section>
                         </>
                     )}
                 </div>

@@ -11,6 +11,8 @@ export interface CFStats {
     problemsSolved: number;
     totalSubmissions: number;
     recentSubmissionDates: string[];
+    topicAC?: Record<string, number>;
+    topicFail?: Record<string, number>;
     weakTopics: string[];
     strongTopics: string[];
     lastSynced: number;

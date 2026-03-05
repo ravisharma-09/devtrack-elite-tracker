@@ -54,6 +54,8 @@ export default async function handler(req, res) {
             problemsSolved: solved.size,
             totalSubmissions: submissions.length,
             recentSubmissionDates: Array.from(recentDates).sort(),
+            topicAC,
+            topicFail,
             weakTopics,
             lastSynced: Date.now(),
         });

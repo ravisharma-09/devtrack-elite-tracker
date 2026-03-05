@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     const { username } = req.query;
     if (!username) return res.status(400).json({ error: 'Missing username' });
 
-    const query = `query getUserProfile($username:String!){matchedUser(username:$username){username profile{ranking}submitStats{acSubmissionNum{difficulty count}}userCalendar{submissionCalendar}}}`;
+    const query = `query getUserProfile($username:String!){matchedUser(username:$username){username profile{ranking}submitStats{acSubmissionNum{difficulty count}}userCalendar{submissionCalendar}tagProblemCounts{advanced{tagName problemsSolved}intermediate{tagName problemsSolved}fundamental{tagName problemsSolved}}}}`;
 
     try {
         const lcRes = await fetch('https://leetcode.com/graphql/', {
@@ -34,6 +34,20 @@ export default async function handler(req, res) {
             submissionDates = Object.keys(cal).map(ts => new Date(parseInt(ts) * 1000).toISOString().split('T')[0]).sort();
         } catch { }
 
+        const tags = {};
+        const processTags = (levelArr) => {
+            if (!Array.isArray(levelArr)) return;
+            levelArr.forEach(item => {
+                tags[item.tagName] = item.problemsSolved;
+            });
+        };
+
+        if (user.tagProblemCounts) {
+            processTags(user.tagProblemCounts.advanced);
+            processTags(user.tagProblemCounts.intermediate);
+            processTags(user.tagProblemCounts.fundamental);
+        }
+
         res.status(200).json({
             username: user.username,
             totalSolved: getCount('All'),
@@ -42,6 +56,7 @@ export default async function handler(req, res) {
             hardSolved: getCount('Hard'),
             ranking: user.profile?.ranking || 0,
             submissionDates,
+            tags,
             lastSynced: Date.now(),
         });
     } catch (e) {
