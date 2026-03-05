@@ -18,7 +18,7 @@ export async function fetchLeetCodeStats(username: string): Promise<LCStats | nu
     if (!username?.trim()) return null;
     try {
         const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-        const res = await fetch(`${baseUrl}/api/lc/${encodeURIComponent(username.trim())}`, {
+        const res = await fetch(`${baseUrl}/api/lc/sync?username=${encodeURIComponent(username.trim())}`, {
             signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) {

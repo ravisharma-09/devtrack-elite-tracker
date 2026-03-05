@@ -22,7 +22,7 @@ export async function fetchCodeforcesStats(handle: string): Promise<CFStats | nu
     if (!handle?.trim()) return null;
     try {
         const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-        const res = await fetch(`${baseUrl}/api/cf/${encodeURIComponent(handle.trim())}`, {
+        const res = await fetch(`${baseUrl}/api/cf/sync?handle=${encodeURIComponent(handle.trim())}`, {
             signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) {
