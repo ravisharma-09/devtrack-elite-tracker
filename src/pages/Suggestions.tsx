@@ -9,15 +9,20 @@ export interface AIRecommendedProblem {
     title: string;
     platform: "LeetCode" | "Codeforces";
     difficulty: "Easy" | "Medium" | "Hard";
-    topic: string;
-    pattern: string;
     url: string;
+}
+
+export interface AILearningStep {
+    stepNumber: number;
+    patternName: string;
+    description: string;
+    questions: AIRecommendedProblem[];
 }
 
 export interface AIRecommendationResult {
     topic: string;
     description: string;
-    questions: AIRecommendedProblem[];
+    steps: AILearningStep[];
 }
 
 type TabType = 'dsa' | 'opensource' | 'webdev';
@@ -54,8 +59,7 @@ const ProblemCard: React.FC<{ prob: AIRecommendedProblem }> = ({ prob }) => (
         <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <ExternalLink size={11} className="text-brand-accent" />
         </div>
-        <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-brand-secondary">{prob.pattern}</span>
+        <div className="mb-2">
             <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${prob.difficulty === 'Hard' ? 'text-red-400 border-red-400/30 bg-red-400/5' : prob.difficulty === 'Medium' ? 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5' : 'text-green-400 border-green-400/30 bg-green-400/5'}`}>
                 {prob.difficulty} · {prob.platform}
             </span>
@@ -278,17 +282,22 @@ export const Suggestions: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="space-y-6">
-                                    {['Easy', 'Medium', 'Hard'].map(diff => {
-                                        const problems = dsaResult.questions.filter(p => p.difficulty === diff);
-                                        if (problems.length === 0) return null;
+                                <div className="space-y-8">
+                                    {dsaResult.steps?.map(step => {
+                                        if (!step.questions || step.questions.length === 0) return null;
                                         return (
-                                            <div key={diff}>
-                                                <h4 className="font-mono text-xs uppercase text-brand-secondary tracking-widest mb-3 border-b border-brand-border/30 pb-2">
-                                                    {diff} Pattern Building
-                                                </h4>
+                                            <div key={step.stepNumber} className="relative pl-6 border-l-2 border-brand-border/40">
+                                                <div className="absolute -left-[5px] top-1.5 w-[8px] h-[8px] rounded-full bg-brand-accent shadow-[0_0_8px_rgba(56,189,248,0.5)]"></div>
+                                                <div className="mb-4">
+                                                    <h4 className="font-mono text-sm font-bold text-brand-primary tracking-wide">
+                                                        Step {step.stepNumber} — <span className="text-brand-accent">{step.patternName}</span>
+                                                    </h4>
+                                                    <p className="text-xs text-brand-secondary font-mono mt-1 leading-relaxed">
+                                                        {step.description}
+                                                    </p>
+                                                </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    {problems.map((p, i) => (
+                                                    {step.questions.map((p, i) => (
                                                         <ProblemCard key={i} prob={p} />
                                                     ))}
                                                 </div>

@@ -1,213 +1,162 @@
-import React from 'react';
-import { useStore } from '../engine/learningStore';
-import type { RoadmapCategory } from '../types';
-import { CheckSquare, Square, Plus, Minus, Lock } from 'lucide-react';
-import { syncRoadmapTopic } from '../engine/syncEngine';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { getSupabaseClient } from '../backend/supabaseClient';
+import { Lock, Unlock, Play, Code2, Terminal, Target, BookOpen } from 'lucide-react';
+import { RetroLoader } from '../components/RetroLoader';
 
 export const Roadmap: React.FC = () => {
-    const {
-        roadmap,
-        completeMicroTask,
-        updateTopicProgress,
-        setRoadmap,
-        setStatistics,
-    } = useStore();
-
     const { user } = useAuth();
+    const [lcSolved, setLcSolved] = useState(0);
+    const [loading, setLoading] = useState(true);
 
-    // Toggle a whole topic (non-microtask topics only)
-    const toggleTopic = (categoryId: string, topicId: string) => {
-        setRoadmap(prev => {
-            const next: RoadmapCategory[] = JSON.parse(JSON.stringify(prev));
-            const cat = next.find(c => c.id === categoryId);
-            if (!cat) return prev;
-            const topic = cat.topics.find(t => t.id === topicId);
-            if (!topic || !topic.unlocked || topic.tasks?.length) return prev;
-
-            const wasComplete = topic.completed;
-            topic.completed = !topic.completed;
-            if (topic.completed && topic.targetCount) topic.progress = topic.targetCount;
-            else if (!topic.completed && topic.targetCount) topic.progress = 0;
-
-            next.forEach(c => {
-                let prevDone = true;
-                c.topics.forEach((t, idx) => {
-                    t.unlocked = idx === 0 ? true : prevDone;
-                    prevDone = t.completed;
-                });
-            });
-
-            setStatistics(s => ({
-                ...s,
-                totalRoadmapTopicsCompleted: s.totalRoadmapTopicsCompleted + (topic.completed && !wasComplete ? 1 : (!topic.completed && wasComplete ? -1 : 0)),
-            }));
-
-            // Auto-unlock and DB write to roadmap_progress
-            if (user && user.id !== 'local') {
-                syncRoadmapTopic(categoryId, topicId, topic.progress || 0, topic.completed, user.id).catch(() => { });
+    useEffect(() => {
+        const loadStats = async () => {
+            if (!user) return;
+            try {
+                const supabase = await getSupabaseClient();
+                if (!supabase) return;
+                const { data } = await supabase.from('external_stats').select('lc').eq('user_id', user.id).single();
+                if (data?.lc?.totalSolved) {
+                    setLcSolved(data.lc.totalSolved);
+                }
+            } catch (e) {
+                console.error("Failed to load LC stats", e);
+            } finally {
+                setLoading(false);
             }
+        };
+        loadStats();
+    }, [user]);
 
-            return next;
-        });
-    };
+    if (loading) return <div className="h-64 mt-8 relative"><RetroLoader title="Loading Roadmap" subtitle="Checking external sync status..." /></div>;
+
+    const phase2Target = 40;
+    const phase2Progress = Math.min(lcSolved, phase2Target);
+    const phase2Pct = Math.round((phase2Progress / phase2Target) * 100);
+
+    const isPhase2Unlocked = true; // Phase 1 is basic review, so Phase 2 is always open
+    const isPhase3Unlocked = lcSolved >= phase2Target;
+    const isPhase4Unlocked = lcSolved >= 150; // Arbitrary high number for specialization
 
     return (
         <div className="space-y-8 animate-fade-in pb-12">
             <header className="mb-8 border-b border-brand-border pb-4">
-                <h2 className="text-2xl font-bold retro-text tracking-widest uppercase mb-2">System Roadmap</h2>
-                <p className="retro-text-sub">SDE Elite Mastery Track — Dependency-Ordered Execution</p>
+                <h2 className="text-2xl font-bold retro-text tracking-widest uppercase mb-2">SYSTEM ROADMAP</h2>
+                <p className="retro-text-sub">SDE Elite Mastery Track — 4-Phase Structured Learning</p>
             </header>
 
-            {roadmap.map(category => {
-                const completedCount = category.topics.filter(t => t.completed).length;
-                const totalCount = category.topics.length;
-                const catPct = Math.round((completedCount / totalCount) * 100);
+            {/* PHASE 1: Python Foundations */}
+            <section className="retro-panel p-6 border-l-4 border-l-blue-500">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <Terminal className="text-blue-400" size={24} />
+                        <div>
+                            <h3 className="text-xl font-bold text-blue-400 uppercase tracking-wide">Phase 1: Python Foundations</h3>
+                            <p className="text-xs text-brand-secondary font-mono mt-1">Loops, Lists, Dictionaries, Sets & Basic Recursion.</p>
+                        </div>
+                    </div>
+                    <Unlock className="text-brand-secondary/50" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {['Reverse Array', 'Count Frequency', 'Find Duplicates', 'String Basics'].map((topic, i) => (
+                        <div key={i} className="bg-brand-bg/40 border border-brand-border/30 rounded p-3 text-center transition-colors hover:border-blue-400">
+                            <span className="text-xs font-mono text-brand-primary">{topic}</span>
+                        </div>
+                    ))}
+                </div>
+            </section>
 
-                return (
-                    <section key={category.id} className="retro-panel p-6">
-                        {/* Category header */}
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 border-b border-brand-border/50 pb-3 gap-2">
-                            <h3 className="text-xl font-semibold retro-accent uppercase tracking-wide">
-                                [{category.title}]
-                            </h3>
-                            <div className="flex items-center gap-3">
-                                <div className="w-32 h-1.5 bg-brand-bg rounded overflow-hidden border border-brand-border/30">
-                                    <div className="h-full bg-brand-primary transition-all duration-500" style={{ width: `${catPct}%` }} />
-                                </div>
-                                <span className="text-xs font-mono text-brand-secondary">
-                                    {completedCount}/{totalCount} · {catPct}%
-                                </span>
+            {/* PHASE 2: Problem Solving Basics */}
+            <section className={`retro-panel p-6 border-l-4 ${isPhase2Unlocked ? 'border-l-green-500' : 'border-l-brand-border/30 opacity-60'}`}>
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <Target className={isPhase2Unlocked ? "text-green-400" : "text-brand-secondary"} size={24} />
+                        <div>
+                            <h3 className={`text-xl font-bold uppercase tracking-wide ${isPhase2Unlocked ? "text-green-400" : "text-brand-secondary"}`}>Phase 2: Problem Solving Basics</h3>
+                            <p className="text-xs text-brand-secondary font-mono mt-1">Master the first 40 core problems to build edge-case awareness.</p>
+                        </div>
+                    </div>
+                    {isPhase2Unlocked ? <Unlock className="text-brand-secondary/50" /> : <Lock className="text-brand-secondary/50" />}
+                </div>
+
+                <div className="mb-4">
+                    <div className="flex justify-between items-end mb-2">
+                        <span className="text-xs font-mono text-brand-secondary uppercase">Progress to unlock Core DSA</span>
+                        <span className="text-sm font-mono font-bold text-brand-primary">{phase2Progress} / {phase2Target} Solved</span>
+                    </div>
+                    <div className="h-2 w-full bg-brand-bg rounded overflow-hidden border border-brand-border/30">
+                        <div className="h-full bg-green-500 transition-all duration-1000" style={{ width: `${phase2Pct}%` }} />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 opacity-80">
+                    {['Array Traversal', 'Simple Math', 'Hashing Basics', 'Simple Binary Search'].map((topic, i) => (
+                        <div key={i} className="bg-brand-bg/40 border border-brand-border/30 rounded p-3 text-center">
+                            <span className="text-xs font-mono text-brand-secondary">{topic}</span>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* PHASE 3: Core DSA Roadmap */}
+            <section className={`retro-panel p-6 border-l-4 ${isPhase3Unlocked ? 'border-l-brand-accent' : 'border-l-brand-border/30 opacity-60'}`}>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+                    <div className="flex items-center gap-3">
+                        <BookOpen className={isPhase3Unlocked ? "text-brand-accent" : "text-brand-secondary"} size={24} />
+                        <div>
+                            <h3 className={`text-xl font-bold uppercase tracking-wide ${isPhase3Unlocked ? "text-brand-accent" : "text-brand-secondary"}`}>Phase 3: Core DSA Roadmap</h3>
+                            <p className="text-xs text-brand-secondary font-mono mt-1">Pattern-based progression for intermediate mastery.</p>
+                        </div>
+                    </div>
+                    {!isPhase3Unlocked ? (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-bg border border-brand-border/50 rounded text-xs font-mono text-brand-secondary">
+                            <Lock size={12} /> Complete Phase 2 ({phase2Target - phase2Progress} left)
+                        </div>
+                    ) : (
+                        <a href="/target" className="flex items-center gap-2 px-4 py-2 bg-brand-accent/10 border border-brand-accent/50 rounded text-xs font-mono text-brand-accent hover:bg-brand-accent hover:text-brand-bg transition-colors">
+                            <Play size={13} /> Start Targeted Practice
+                        </a>
+                    )}
+                </div>
+
+                <div className="space-y-4">
+                    {[
+                        { topic: 'Arrays', patterns: 'Traversal → Hashing → Two Pointers → Prefix Sum → Sliding Window' },
+                        { topic: 'Linked Lists', patterns: 'Fast/Slow Pointers → Reversal → Merging' },
+                        { topic: 'Trees', patterns: 'DFS → BFS → BST Operations' },
+                    ].map((item, i) => (
+                        <div key={i} className="flex flex-col md:flex-row md:items-center justify-between p-3 bg-brand-bg/30 border border-brand-border/20 rounded">
+                            <h4 className="font-mono font-bold text-sm text-brand-primary mb-1 md:mb-0 w-32">{item.topic}</h4>
+                            <span className="text-[10px] md:text-xs font-mono text-brand-secondary flex-1">{item.patterns}</span>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* PHASE 4: Specialization Tracks */}
+            <section className={`retro-panel p-6 border-l-4 ${isPhase4Unlocked ? 'border-l-purple-500' : 'border-l-brand-border/30 opacity-60'}`}>
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <Code2 className={isPhase4Unlocked ? "text-purple-400" : "text-brand-secondary"} size={24} />
+                        <div>
+                            <h3 className={`text-xl font-bold uppercase tracking-wide ${isPhase4Unlocked ? "text-purple-400" : "text-brand-secondary"}`}>Phase 4: Advanced Specialization</h3>
+                            <p className="text-xs text-brand-secondary font-mono mt-1">Hard level algorithms and specialized system design themes.</p>
+                        </div>
+                    </div>
+                    {!isPhase4Unlocked && <Lock className="text-brand-secondary/50" />}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                    {['Dynamic Programming Expert', 'Graph Algorithms Specialist', 'Competitive Programming Track', 'System Design Basics'].map((track, i) => (
+                        <div key={i} className="p-4 bg-brand-bg/20 border border-brand-border/20 rounded flex items-center gap-3">
+                            <div className="w-8 h-8 rounded bg-brand-bg flex items-center justify-center border border-brand-border/30">
+                                {isPhase4Unlocked ? <Unlock size={14} className="text-purple-400" /> : <Lock size={14} className="text-brand-secondary" />}
                             </div>
+                            <span className={`font-mono text-sm ${isPhase4Unlocked ? 'text-brand-primary' : 'text-brand-secondary'}`}>{track}</span>
                         </div>
-
-                        {/* Topics */}
-                        <div className="space-y-3">
-                            {category.topics.map(topic => {
-                                const hasMicroTasks = topic.tasks && topic.tasks.length > 0;
-                                const hasQuantTarget = !!topic.targetCount;
-                                const microDone = hasMicroTasks
-                                    ? (topic.tasks as any[]).filter((t: any) => t.completed).length
-                                    : 0;
-
-                                return (
-                                    <div
-                                        key={topic.id}
-                                        className={`flex flex-col p-4 rounded border relative overflow-hidden transition-colors ${topic.unlocked
-                                            ? 'bg-brand-bg/50 border-brand-border hover:border-brand-primary/40'
-                                            : 'bg-brand-bg/20 border-brand-border/20 opacity-50'}`}
-                                    >
-                                        {/* DSA progress bar background */}
-                                        {hasQuantTarget && topic.unlocked && (
-                                            <div
-                                                className="absolute left-0 top-0 bottom-0 bg-brand-primary/5 transition-all duration-500"
-                                                style={{ width: `${(topic.progress / topic.targetCount!) * 100}%` }}
-                                            />
-                                        )}
-
-                                        {/* Topic Row */}
-                                        <div className="flex items-center justify-between z-10 relative">
-                                            <div className="flex items-center gap-3">
-                                                {!topic.unlocked ? (
-                                                    <Lock size={16} className="text-brand-border flex-shrink-0" />
-                                                ) : hasMicroTasks ? (
-                                                    <div className={`w-4 h-4 rounded-sm border flex items-center justify-center flex-shrink-0 ${topic.completed ? 'bg-brand-primary border-brand-primary' : 'border-brand-border'}`}>
-                                                        {topic.completed && <span className="text-brand-bg text-xs">✓</span>}
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => hasQuantTarget ? undefined : toggleTopic(category.id, topic.id)}
-                                                        disabled={!topic.unlocked}
-                                                        className={`flex-shrink-0 transition-colors ${!topic.unlocked ? 'cursor-not-allowed text-brand-border' : 'text-brand-primary hover:text-brand-accent'}`}
-                                                    >
-                                                        {topic.completed ? <CheckSquare size={18} /> : <Square size={18} />}
-                                                    </button>
-                                                )}
-
-                                                <div>
-                                                    <h4 className={`font-medium text-sm ${topic.completed ? 'text-brand-primary/60 line-through' : !topic.unlocked ? 'text-brand-secondary' : 'text-brand-primary'}`}>
-                                                        {topic.title}
-                                                    </h4>
-                                                    <div className="text-xs text-brand-secondary font-mono mt-0.5">
-                                                        {!topic.unlocked
-                                                            ? '🔒 Complete previous topic to unlock'
-                                                            : hasMicroTasks
-                                                                ? `${microDone}/${topic.tasks!.length} tasks done`
-                                                                : `Est: ${topic.estimatedTime}`}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* DSA +/- controls */}
-                                            {hasQuantTarget && topic.unlocked && (
-                                                <div className={`flex items-center gap-2 bg-brand-bg px-2.5 py-1 rounded border border-brand-border/50`}>
-                                                    <button
-                                                        onClick={() => updateTopicProgress(category.id, topic.id, -1)}
-                                                        disabled={topic.progress <= 0}
-                                                        className="text-brand-secondary hover:text-brand-accent disabled:opacity-30 transition-colors"
-                                                    >
-                                                        <Minus size={14} />
-                                                    </button>
-                                                    <span className="font-mono text-xs min-w-[4rem] text-center text-brand-primary">
-                                                        {topic.progress} / {topic.targetCount}
-                                                    </span>
-                                                    <button
-                                                        onClick={() => updateTopicProgress(category.id, topic.id, 1)}
-                                                        disabled={topic.progress >= topic.targetCount!}
-                                                        className="text-brand-secondary hover:text-brand-primary disabled:opacity-30 transition-colors"
-                                                    >
-                                                        <Plus size={14} />
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {/* Status badge for plain topics */}
-                                            {!hasQuantTarget && !hasMicroTasks && topic.unlocked && (
-                                                <span className={`text-xs font-mono uppercase px-2 py-1 rounded border ${topic.completed ? 'bg-brand-primary/10 text-brand-primary border-brand-primary/30' : 'text-brand-secondary border-brand-border'}`}>
-                                                    {topic.completed ? 'Done' : 'Pending'}
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        {/* Micro-task checklist */}
-                                        {hasMicroTasks && topic.unlocked && (
-                                            <div className="mt-4 pt-4 border-t border-brand-border/20 z-10 relative">
-                                                <div className="text-xs uppercase text-brand-secondary tracking-widest font-mono mb-3">
-                                                    Execution Checklist — {microDone}/{topic.tasks!.length}
-                                                </div>
-                                                <ul className="space-y-2">
-                                                    {(topic.tasks as any[]).map((task: any) => (
-                                                        <li key={task.id} className="flex items-center gap-3">
-                                                            <button
-                                                                onClick={() => completeMicroTask(category.id, topic.id, task.id, !task.completed)}
-                                                                className={`flex-shrink-0 transition-colors ${task.completed ? 'text-brand-primary' : 'text-brand-secondary hover:text-brand-accent'}`}
-                                                            >
-                                                                {task.completed ? <CheckSquare size={15} /> : <Square size={15} />}
-                                                            </button>
-                                                            <span className={`text-sm ${task.completed ? 'line-through text-brand-secondary' : 'text-brand-primary/90'}`}>
-                                                                {task.title}
-                                                            </span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        )}
-
-                                        {/* Micro-task checklist locked state hint */}
-                                        {hasMicroTasks && !topic.unlocked && (
-                                            <div className="mt-3 pt-3 border-t border-brand-border/10 z-10 relative">
-                                                <p className="text-xs text-brand-secondary/40 font-mono">
-                                                    {topic.tasks!.length} tasks locked — complete previous topic
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </section>
-                );
-            })}
+                    ))}
+                </div>
+            </section>
         </div>
     );
 };
