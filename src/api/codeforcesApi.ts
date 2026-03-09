@@ -9,6 +9,7 @@ export interface CFStats {
     rank: string;
     maxRank: string;
     problemsSolved: number;
+    solvedProblemList?: string[];
     totalSubmissions: number;
     recentSubmissionDates: string[];
     topicAC?: Record<string, number>;

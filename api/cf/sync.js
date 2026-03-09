@@ -23,6 +23,7 @@ export default async function handler(req, res) {
         const submissions = statusData.status === 'OK' ? statusData.result : [];
 
         const solved = new Set();
+        const solvedProblemNames = new Set();
         const ninetyDaysAgo = Date.now() - 90 * 86400000;
         const recentDates = new Set();
         const topicAC = {};
@@ -31,7 +32,10 @@ export default async function handler(req, res) {
         for (const sub of submissions) {
             const pid = `${sub.problem?.contestId}_${sub.problem?.index}`;
             const isAC = sub.verdict === 'OK';
-            if (isAC) solved.add(pid);
+            if (isAC) {
+                solved.add(pid);
+                if (sub.problem?.name) solvedProblemNames.add(sub.problem.name);
+            }
             const tsMs = (sub.creationTimeSeconds || 0) * 1000;
             if (tsMs > ninetyDaysAgo) recentDates.add(new Date(tsMs).toISOString().split('T')[0]);
             for (const tag of (sub.problem?.tags || [])) {
@@ -52,6 +56,7 @@ export default async function handler(req, res) {
             rank: user.rank || 'unrated',
             maxRank: user.maxRank || 'unrated',
             problemsSolved: solved.size,
+            solvedProblemList: Array.from(solvedProblemNames),
             totalSubmissions: submissions.length,
             recentSubmissionDates: Array.from(recentDates).sort(),
             topicAC,

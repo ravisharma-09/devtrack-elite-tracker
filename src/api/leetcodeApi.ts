@@ -9,6 +9,7 @@ export interface LCStats {
     mediumSolved: number;
     hardSolved: number;
     ranking: number;
+    solvedProblemList?: string[];
     submissionDates: string[];
     tags?: Record<string, number>;
     lastSynced: number;
