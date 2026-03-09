@@ -8,85 +8,135 @@ export default async function handler(req, res) {
     const { topic, mastery, rating } = req.query;
     if (!topic) return res.status(400).json({ error: 'Missing topic' });
 
-    const apiKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
-    if (!apiKey) {
-        return res.status(500).json({ error: 'Missing Groq API Key on server.' });
-    }
-
-    const currentMastery = mastery ? parseInt(mastery) : 0;
-    const currentRating = rating ? parseInt(rating) : 1200;
-
-    const systemPrompt = `
-You are an elite competitive programming and technical interview coach.
-Your student needs a structured, step-by-step learning path for the topic: "${topic}".
-Their current mastery of this topic is ${currentMastery}% (0-100 scale).
-
-Your exact job is to teach algorithms step-by-step by generating a structured "Learning Path" instead of listing random questions.
-The path MUST:
-1. Break down "${topic}" into chronological "Steps" based on standard algorithmic patterns (e.g., Step 1: Traversal, Step 2: Hashing, Step 3: Two Pointers).
-2. For each step, provide 2-4 highly curated real problems from LeetCode or Codeforces that teach that specific pattern.
-3. Gradually increase in difficulty across the steps.
-4. If their mastery is low (< 50%), focus the steps heavily on fundamental concepts. If it is high, focus the steps on advanced optimizations.
-
-You MUST return ONLY a JSON object with this exact schema:
-{
-    "topic": "${topic}",
-    "description": "A 1-2 sentence coaching comment explaining the focus of this learning path.",
-    "steps": [
-        {
-            "stepNumber": 1,
-            "patternName": "Specific algorithm pattern (e.g., Traversal)",
-            "description": "Short explanation of what this pattern teaches.",
-            "questions": [
-                {
-                    "title": "Exact problem name (e.g., Two Sum)",
-                    "platform": "LeetCode" | "Codeforces",
-                    "difficulty": "Easy" | "Medium" | "Hard",
-                    "url": "The absolute direct URL to the problem on leetcode.com or codeforces.com"
-                }
-            ]
-        }
-    ]
-}
-
-DO NOT wrap the response in markdown blocks like \`\`\`json. Return pure raw JSON.
-Ensure the links are 100% accurate standard URL formats.
-    `;
-
     try {
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: `Generate structured practice for ${topic}.` }
-                ],
-                temperature: 0.3,
-                response_format: { type: "json_object" }
-            })
+        // Dynamically import data to avoid caching issues in serverless
+        const fs = await import('fs');
+        const path = await import('path');
+        const { fileURLToPath } = await import('url');
+        
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        
+        let datasetPath = path.resolve(__dirname, '../src/data/dsa_dataset.json');
+        
+        if (!fs.existsSync(datasetPath)) {
+             // Fallback for vercel build environment vs local vite proxy
+             datasetPath = path.resolve(process.cwd(), 'src/data/dsa_dataset.json');
+        }
+
+        const rawData = fs.readFileSync(datasetPath, 'utf8');
+        const dataset = JSON.parse(rawData);
+
+        // 1. Filter by topic (case insensitive)
+        const topicNorm = topic.toLowerCase().trim();
+        const availableTopics = [...new Set(dataset.map(p => p.topic.toLowerCase()))];
+        
+        // Find closest string match or exact match
+        const matchedTopic = availableTopics.find(t => t === topicNorm) 
+            || availableTopics.find(t => t.includes(topicNorm) || topicNorm.includes(t));
+
+        if (!matchedTopic) {
+            return res.status(404).json({ error: `Topic '${topic}' not found in dataset.` });
+        }
+
+        let problems = dataset.filter(p => p.topic.toLowerCase() === matchedTopic);
+
+        // 2. Select difficulty window based on mastery and rating
+        const currentMastery = mastery ? parseInt(mastery) : 0;
+        const currentRating = rating ? parseInt(rating) : 1200;
+
+        // If mastery is low (<50%), heavily weight towards Easy / 800-1100
+        // If mid (50-80%), weight Medium / 1200-1500
+        // If high (>80%), weight Hard / 1600+
+        let allowedDiffs = [];
+        let maxCFRating = 0;
+        let minCFRating = 0;
+
+        if (currentMastery < 50) {
+            allowedDiffs = ["easy"];
+            minCFRating = 800; maxCFRating = 1100;
+        } else if (currentMastery < 80) {
+            allowedDiffs = ["easy", "medium"];
+            minCFRating = 1000; maxCFRating = 1500;
+        } else {
+            allowedDiffs = ["medium", "hard"];
+            minCFRating = 1400; maxCFRating = 2000;
+        }
+
+        // Adjust based on CF rating if high (to not serve trivial problems to strong coders)
+        if (currentRating > 1400) {
+             minCFRating = Math.max(minCFRating, currentRating - 200);
+             if (currentRating > 1600) allowedDiffs = ["medium", "hard"];
+        }
+
+        let filteredProblems = problems.filter(p => {
+             if (p.platform === "leetcode") {
+                 return allowedDiffs.includes(p.difficulty);
+             } else {
+                 return p.cf_rating >= minCFRating && p.cf_rating <= maxCFRating;
+             }
         });
 
-        if (!response.ok) {
-            const errBody = await response.text();
-            console.error("[Groq] API error:", errBody);
-            return res.status(response.status).json({ error: "Groq API error", details: errBody });
+        // 3. Group by patterns to form steps
+        const patternsMap = {};
+        for(const p of filteredProblems) {
+             if (!patternsMap[p.pattern]) patternsMap[p.pattern] = [];
+             patternsMap[p.pattern].push(p);
         }
 
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content;
-
-        if (!content) {
-            return res.status(502).json({ error: "Empty content received from Groq" });
+        // 4. Build exactly 2 or 3 steps containing 3-4 problems each
+        const allPatterns = Object.keys(patternsMap);
+        
+        // If empty fallback (shouldn't happen with 700 problems)
+        if (allPatterns.length === 0) {
+            return res.status(200).json({
+                topic: problems[0].topic,
+                description: "Selected targeted practice core fundamentals.",
+                steps: [{
+                    stepNumber: 1,
+                    patternName: "Core Practice",
+                    description: "Mixed fundamental questions.",
+                    questions: problems.slice(0, 4).map(({title, platform, difficulty, link}) => ({title, platform, difficulty: difficulty.charAt(0).toUpperCase() + difficulty.slice(1), url: link}))
+                }]
+            });
         }
 
-        return res.status(200).json(JSON.parse(content));
+        // Shuffle patterns so it's somewhat fresh each load
+        allPatterns.sort(() => 0.5 - Math.random());
+        const selectedPatterns = allPatterns.slice(0, 3);
+        
+        const steps = [];
+        for (let i = 0; i < selectedPatterns.length; i++) {
+             const pattern = selectedPatterns[i];
+             const patternProblems = patternsMap[pattern];
+             patternProblems.sort(() => 0.5 - Math.random()); // shuffle inside pattern
+             
+             // Pick up to 4 problems
+             const qs = patternProblems.slice(0, 4).map(p => ({
+                 title: p.title,
+                 platform: p.platform === "leetcode" ? "LeetCode" : "Codeforces",
+                 difficulty: p.difficulty.charAt(0).toUpperCase() + p.difficulty.slice(1),
+                 url: p.link
+             }));
+
+             steps.push({
+                 stepNumber: i + 1,
+                 patternName: pattern,
+                 description: `Learn to identify and apply the ${pattern} technique to quickly solve this class of problems.`,
+                 questions: qs
+             });
+        }
+
+        const responseObj = {
+            topic: problems[0].topic,
+            description: `Targeted progression path adapted for your ${currentMastery}% mastery.`,
+            steps: steps
+        };
+
+        return res.status(200).json(responseObj);
+
     } catch (e) {
-        console.error("[Groq] Lambda execution failed:", e);
-        return res.status(502).json({ error: e.message });
+        console.error("Dataset recommendation engine failed:", e);
+        return res.status(500).json({ error: e.message });
     }
 }
